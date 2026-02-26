@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from pair_wise import LinearProjector
+from .pair_wise import LinearProjector
 
 
 def train_infonce(batches, d, k, lr=1e-3, epochs=5, tau=0.07, device="cpu"):
@@ -38,7 +38,7 @@ def train_infonce(batches, d, k, lr=1e-3, epochs=5, tau=0.07, device="cpu"):
     return model
 
 
-from data_loader import (
+from .data_loader import (
     SplitConfig,
     prepare_parallel_data,
     OllamaEmbedder,

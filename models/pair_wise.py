@@ -39,7 +39,7 @@ def train(data_loader, d, k, lr=1e-3, margin=0.0, epochs=5, device="cpu"):
     return model
 
 
-from data_loader import (
+from .data_loader import (
     SplitConfig,
     prepare_parallel_data,
     OllamaEmbedder,
