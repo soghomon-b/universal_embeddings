@@ -23,10 +23,10 @@ EVAL_LINKS_DIR = "data/eval/links.csv"
 SEED = 12
 
 # --- choose real hyperparams ---
-SIZE = 50000
+SIZE = 50
 BATCH = 256
-D = None  # let supcon auto-detect if you want
-K_grad = 256
+D = 128  # let supcon auto-detect if you want
+K_grad = 50
 EPOCHS = 5
 lr = 1e-3
 tau = 0.07
@@ -42,8 +42,11 @@ n_max = 0
 num_sentences_for_retreival = 20
 
 # Training
-inforce = run_inforce_training_example(DATA_DIR, SEED, SIZE, None, K_grad, DEVICE_STR)
-pairwise = run_pairwise_training_example(DATA_DIR, SEED, SIZE, None, K_grad, DEVICE_STR)
+model = run_inforce_training_example(
+        "E:/thesis_work/nllb_sampled/merged.tsv", subset_size=100, d=10, k=11
+    )
+inforce = run_inforce_training_example(DATA_DIR, SEED, SIZE, D, K_grad, DEVICE_STR)
+pairwise = run_pairwise_training_example(DATA_DIR, SEED, SIZE, D, K_grad, DEVICE_STR)
 
 supcon, languages = run_supcon_training_example(
     tsv_path=DATA_DIR,
