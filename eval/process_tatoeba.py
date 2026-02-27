@@ -297,19 +297,20 @@ if __name__ == "__main__":
     ]
     k = 20
 
-    SENTENCES = "../data/eval/sentences.csv"
-    LINKS = "../data/eval/links.csv"
+    SENTENCES = "data/eval/sentences.csv"
+    LINKS = "data/eval/links.csv"
 
     out = extract_parallel_maxcover(
         SENTENCES,
         LINKS,
         languages,
-        n_sentences=k,
+        n_sentences=20,
         min_langs=5,  # require at least 5 of your requested languages
         fill_missing=None,  # or "" if you prefer
     )
 
     print("Returned clusters:", len(out))
+    print(out)
 
     for i, row in enumerate(out, 1):
         print(

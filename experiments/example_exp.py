@@ -23,7 +23,7 @@ EVAL_LINKS_DIR = "data/eval/links.csv"
 SEED = 12
 
 # --- choose real hyperparams ---
-SIZE = 50
+SIZE = 500
 BATCH = 256
 D = 128  # let supcon auto-detect if you want
 K_grad = 50
@@ -36,15 +36,26 @@ pair_subset_size = 10
 sentence_subset_size = 20
 K_geo = 50
 r = 128
-n_min = 0
-n_max = 0
+n_min = 1
+n_max = 30
 
 num_sentences_for_retreival = 20
 
 # Training
-model = run_inforce_training_example(
-        "E:/thesis_work/nllb_sampled/merged.tsv", subset_size=100, d=10, k=11
-    )
+
+geometric = run_geometric_training_example(
+    tsv_path=DATA_DIR,
+    seed=SEED,
+    pair_subset_size=pair_subset_size,
+    sentence_subset_size=sentence_subset_size,
+    K=K_geo,
+    r=r,
+    n_min=n_min,
+    n_max=n_max,
+    NUM_RUNS=EPOCHS,
+)
+
+D, K_grad = geometric.shape
 inforce = run_inforce_training_example(DATA_DIR, SEED, SIZE, D, K_grad, DEVICE_STR)
 pairwise = run_pairwise_training_example(DATA_DIR, SEED, SIZE, D, K_grad, DEVICE_STR)
 
@@ -61,17 +72,7 @@ supcon, languages = run_supcon_training_example(
     device=DEVICE_STR,
 )
 
-geometric = run_geometric_training_example(
-    tsv_path=DATA_DIR,
-    seed=SEED,
-    pair_subset_size=pair_subset_size,
-    sentence_subset_size=sentence_subset_size,
-    K=K_geo,
-    r=r,
-    n_min=n_min,
-    n_max=n_max,
-    NUM_RUNS=EPOCHS,
-)
+
 
 # V extraction
 V_inforce = inforce.proj.weight.detach().float().cpu().T
@@ -85,7 +86,21 @@ name_to_V = {
     "supcon": V_supcon,
     "geometric": V_geometric,
 }
+def remove_nones_parallel(parallel_lists):
+    """
+    Removes None entries from each parallel sentence group.
 
+    Input:
+        parallel_lists: list[list[str | None]]
+
+    Output:
+        list[list[str]]
+    """
+    return [
+        [s for s in group if s is not None]
+        for group in parallel_lists
+        if any(s is not None for s in group)
+    ]
 retrieval_groups = extract_parallel_maxcover(
     EVAL_SENTENCES_DIR,
     EVAL_LINKS_DIR,
@@ -94,17 +109,33 @@ retrieval_groups = extract_parallel_maxcover(
     min_langs=5,
     fill_missing=None,
 )
-
+retrieval_groups = remove_nones_parallel(retrieval_groups)
 
 def torch_embedder_to_numpy(embedder):
-    def _embed_fn(sentences: list[str]) -> np.ndarray:
+    def _embed_fn(sentences):
+        # 1) Validate / sanitize
+        cleaned = []
+        for i, s in enumerate(sentences):
+            if s is None:
+                raise ValueError(f"Got None sentence at index {i} in batch of size {len(sentences)}")
+            if not isinstance(s, str):
+                s = str(s)
+            s = s.strip()
+            if not s:
+                raise ValueError(f"Got empty sentence at index {i}")
+            cleaned.append(s)
+
+        # 2) Embed
         with torch.no_grad():
-            x = embedder(sentences)
-            return x.detach().cpu().numpy().astype(np.float32)
+            x = embedder(cleaned)
+
+            # 3) Handle numpy vs torch return (robust)
+            if isinstance(x, torch.Tensor):
+                return x.detach().cpu().numpy().astype(np.float32)
+            else:
+                return np.asarray(x, dtype=np.float32)
 
     return _embed_fn
-
-
 embed_base = OllamaEmbedder(model="granite-embedding:278m")
 cache = DiskEmbeddingCache("./emb_cache_granite278m")
 embed_src = CachedEmbedder(embed_base, cache)
@@ -123,3 +154,4 @@ out_path = run_full_eval(
 )
 
 print(f"Finished Experiment #{EXP_NUMBER}, Wrote: {out_path}")
+

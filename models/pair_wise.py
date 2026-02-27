@@ -19,7 +19,10 @@ def train(data_loader, d, k, lr=1e-3, margin=0.0, epochs=5, device="cpu"):
 
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     criterion = torch.nn.CosineEmbeddingLoss(margin=margin)
-
+    batch = next(iter(data_loader))
+    print("BATCH TYPE:", type(batch))
+    print("BATCH LEN:", len(batch) if hasattr(batch, "__len__") else None)
+    print("BATCH:", batch if isinstance(batch, tuple) else "not a tuple")
     for _ in range(epochs):
         for y, e_i, e_j in data_loader:
             # e_i, e_j: (B, d)
@@ -85,6 +88,10 @@ def run_pairwise_training_example(
     )
 
     # Train projector (your function)
+    batch = next(iter(train_loader))
+    print("BATCH TYPE:", type(batch))
+    print("BATCH LEN:", len(batch) if hasattr(batch, "__len__") else None)
+    print("BATCH:", batch if isinstance(batch, tuple) else "not a tuple")
     model = train(train_batches, d=d, k=k, device=device)
 
     return model

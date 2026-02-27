@@ -5,8 +5,19 @@ from typing import Callable, Iterable, List, Optional, Sequence, Tuple
 
 
 class OllamaEmbedder:
+    """
+    Simple Ollama embedder that calls the /api/embeddings endpoint.
+
+    - embed_one(text) -> Tensor[d]
+    - embed(sentences) -> Tensor[N, d]
+    - __call__(sentences) -> Tensor[N, d]
+    """
+
     def __init__(
-        self, model: str, host: str = "http://localhost:11434", timeout: int = 120
+        self,
+        model: str,
+        host: str = "http://localhost:11434",
+        timeout: float = 60.0,
     ):
         self.model = model
         self.url = host.rstrip("/") + "/api/embeddings"
@@ -14,23 +25,55 @@ class OllamaEmbedder:
         self._dim: Optional[int] = None
 
     def embed_one(self, text: str) -> torch.Tensor:
+        if text is None:
+            raise ValueError("embed_one received None text")
+
         r = requests.post(
-            self.url, json={"model": self.model, "prompt": text}, timeout=self.timeout
+            self.url,
+            json={"model": self.model, "prompt": text},
+            timeout=self.timeout,
         )
         r.raise_for_status()
         data = r.json()
+
         vec = data.get("embedding", None)
         if vec is None:
             raise RuntimeError(f"No 'embedding' in response: {data}")
+
         if self._dim is None:
             self._dim = len(vec)
+
         return torch.tensor(vec, dtype=torch.float32)
+
+    def embed(self, sentences: List[str]) -> torch.Tensor:
+        # Validate/sanitize inputs early for clearer errors
+        if sentences is None:
+            raise ValueError("embed received None sentences list")
+
+        vecs = []
+        for i, s in enumerate(sentences):
+            if s is None:
+                raise ValueError(f"embed received None at index {i}")
+            if not isinstance(s, str):
+                s = str(s)
+            s = s.strip()
+            if not s:
+                raise ValueError(f"embed received empty/whitespace string at index {i}")
+            vecs.append(self.embed_one(s))
+
+        if not vecs:
+            # Return an empty (0, d) tensor if nothing to embed.
+            d = self._dim or 0
+            return torch.empty((0, d), dtype=torch.float32)
+
+        return torch.stack(vecs, dim=0)
 
     @property
     def dim(self) -> Optional[int]:
         return self._dim
 
-
+    def __call__(self, sentences: List[str]) -> torch.Tensor:
+        return self.embed(sentences)
 import hashlib
 import os
 import json
