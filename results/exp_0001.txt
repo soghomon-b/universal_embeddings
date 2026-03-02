@@ -1,0 +1,37 @@
+Experiment: exp_0001
+Generated:  2026-03-01 18:59:03
+
+=== SETTINGS ===
+projection_mode = subspace_coords
+retrieval_K      = 10
+retrieval_trials = 500
+seed             = 43
+
+=== CKA (between projection matrices V) ===
+               infonce   pairwise     supcon  geometric
+infonce         1.0000     0.3276     0.3698     0.2347
+pairwise        0.3276     1.0000     0.3053     0.1832
+supcon          0.3698     0.3053     1.0000     0.2380
+geometric       0.2347     0.1832     0.2380     1.0000
+
+=== RETRIEVAL RESULTS ===
+
+[geometric]
+Accuracy@1: 0.6740
+MRR:        0.7803
+Recall@k:   1:0.6740, 3:0.8600, 5:0.9380
+
+[infonce]
+Accuracy@1: 0.6000
+MRR:        0.7174
+Recall@k:   1:0.6000, 3:0.7900, 5:0.8840
+
+[pairwise]
+Accuracy@1: 0.4960
+MRR:        0.6384
+Recall@k:   1:0.4960, 3:0.6980, 5:0.8320
+
+[supcon]
+Accuracy@1: 0.5900
+MRR:        0.7166
+Recall@k:   1:0.5900, 3:0.7960, 5:0.8740
