@@ -386,3 +386,49 @@ class CachedEmbedder:
                 out[pos] = vec
 
         return torch.stack(out, dim=0)
+
+
+def make_pairwise_batches_from_loader(
+    loader: DataLoader,
+    embed_fn_src: Callable[[List[str]], torch.Tensor],
+    embed_fn_tgt: Callable[[List[str]], torch.Tensor],
+    device: str = "cpu",
+    embed_batch_size: int = 64,
+    neg_ratio: float = 1.0,  # 1.0 => same number of negs as pos
+) -> Iterable[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
+    """
+    Yields (y, E1, E2).
+    Positives: aligned parallel pairs => y=+1
+    Negatives: mismatched pairs via shuffling => y=-1
+    """
+    for src_langs, tgt_langs, s1, s2 in loader:
+        E1 = embed_sentences_in_batches(s1, embed_fn_src, embed_batch_size, device)
+        E2 = embed_sentences_in_batches(s2, embed_fn_tgt, embed_batch_size, device)
+
+        B = E1.size(0)
+
+        # positives
+        y_pos = torch.ones(B, device=E1.device, dtype=torch.float32)
+
+        # negatives: shuffle targets
+        perm = torch.randperm(B, device=E1.device)
+        E2_neg = E2[perm]
+        y_neg = -torch.ones(B, device=E1.device, dtype=torch.float32)
+
+        # optionally subsample negatives
+        if neg_ratio < 1.0:
+            m = max(1, int(B * neg_ratio))
+            idx = torch.randperm(B, device=E1.device)[:m]
+            E1_neg = E1[idx]
+            E2_neg = E2_neg[idx]
+            y_neg = y_neg[idx]
+        else:
+            E1_neg = E1
+
+        # concatenate
+        y = torch.cat([y_pos, y_neg], dim=0)          # (B + M,)
+        E1_all = torch.cat([E1, E1_neg], dim=0)       # (B + M, d)
+        E2_all = torch.cat([E2, E2_neg], dim=0)       # (B + M, d)
+
+        yield y, E1_all, E2_all
+

@@ -536,7 +536,7 @@ def run_supcon_training_example(
 if __name__ == "__main__":
     # Example usage:
     model, languages = run_supcon_training_example(
-        tsv_path="E:/thesis_work/nllb_sampled/merged.tsv",
+        tsv_path="",
         subset_size=10,  # small for smoke test
         d=None,  # auto-detect from Ollama embeddings
         k=11,

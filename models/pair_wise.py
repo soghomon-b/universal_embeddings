@@ -1,7 +1,14 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+from .data_loader import (
+    SplitConfig,
+    prepare_parallel_data,
+    OllamaEmbedder,
+    DiskEmbeddingCache,
+    CachedEmbedder,
+    make_pairwise_batches_from_loader,
+)
 
 class LinearProjector(nn.Module):
     def __init__(self, d: int, k: int):
@@ -42,16 +49,6 @@ def train(data_loader, d, k, lr=1e-3, margin=0.0, epochs=5, device="cpu"):
     return model
 
 
-from .data_loader import (
-    SplitConfig,
-    prepare_parallel_data,
-    OllamaEmbedder,
-    DiskEmbeddingCache,
-    CachedEmbedder,
-    make_infonce_batches_from_loader,
-)
-
-
 def run_pairwise_training_example(
     tsv_path: str,
     seed: int,
@@ -83,15 +80,9 @@ def run_pairwise_training_example(
     embed_tgt = embed_src  # same cache/model
 
     # Create an iterator/generator of (E1, E2) batches for InfoNCE training.
-    train_batches = make_infonce_batches_from_loader(
-        train_loader, embed_src, embed_tgt, device=device, embed_batch_size=64
-    )
-
-    # Train projector (your function)
-    batch = next(iter(train_loader))
-    print("BATCH TYPE:", type(batch))
-    print("BATCH LEN:", len(batch) if hasattr(batch, "__len__") else None)
-    print("BATCH:", batch if isinstance(batch, tuple) else "not a tuple")
+    train_batches = make_pairwise_batches_from_loader(
+    train_loader, embed_src, embed_tgt, device=device, embed_batch_size=64, neg_ratio=1.0
+)
     model = train(train_batches, d=d, k=k, device=device)
 
     return model
@@ -100,6 +91,6 @@ def run_pairwise_training_example(
 if __name__ == "__main__":
     # Example usage:
     model = run_pairwise_training_example(
-        "E:/thesis_work/nllb_sampled/merged.tsv", subset_size=100, d=10, k=11
+        "", subset_size=100, d=10, k=11
     )
     print(model)

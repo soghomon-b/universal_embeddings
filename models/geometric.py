@@ -553,7 +553,7 @@ def run_geometric_training_example(
 if __name__ == "__main__":
     # Example usage:
     V_acc = run_geometric_training_example(
-        tsv_path="E:/thesis_work/nllb_sampled/merged.tsv",
+        tsv_path="",
         seed=42,  # same seed as your PyTorch pipeline
         pair_subset_size=10,  # sample pairs first
         sentence_subset_size=20,  # then sample sentences (src+tgt)

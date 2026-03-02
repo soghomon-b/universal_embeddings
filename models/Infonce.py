@@ -92,6 +92,6 @@ def run_inforce_training_example(
 if __name__ == "__main__":
     # Example usage:
     model = run_inforce_training_example(
-        "E:/thesis_work/nllb_sampled/merged.tsv", subset_size=100, d=10, k=11
+        "", subset_size=100, d=10, k=11
     )
     print(model)
