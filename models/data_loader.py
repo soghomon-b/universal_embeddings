@@ -344,8 +344,8 @@ class DiskEmbeddingCache:
     def _key(self, text: str) -> str:
         return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
-    def get(self, key: str):
-        path = self._key_to_path(key)  # whatever you already do
+    def get(self, text: str) -> Optional[torch.Tensor]:
+        path = self._path(text)
         if not path.exists():
             return None
         try:

@@ -293,8 +293,8 @@ class DiskEmbeddingCache:
     def _path(self, text: str) -> str:
         return os.path.join(self.cache_dir, self._key(text) + ".json")
 
-    def get(self, key: str):
-        path = self._key_to_path(key)  # whatever you already do
+    def get(self, text: str) -> Optional[torch.Tensor]:
+        path = self._path(text)
         if not path.exists():
             return None
         try:
