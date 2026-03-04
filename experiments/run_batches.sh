@@ -27,8 +27,8 @@ while IFS= read -r f || [[ -n "$f" ]]; do
   base="$(basename "$f")"
   log="$LOG_DIR/${base%.sh}.log"
 
-  bash "$f" >"$log" 2>&1
-  status=$?
+  bash "$f" 2>&1 | tee "$log"
+  status=${PIPESTATUS[0]}
 
   if [[ $status -ne 0 ]]; then
     echo "FAILED ($status): $f (see $log)"
