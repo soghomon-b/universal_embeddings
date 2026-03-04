@@ -84,7 +84,7 @@ def run_inforce_training_example(
     )
 
     # Train projector (your function)
-    model = train_infonce(train_batches, d=d, k=k, device=device, epochs=epochs, batches=batches)
+    model = train_infonce(train_batches, d=d, k=k, device=device, epochs=epochs)
 
     return model
 
