@@ -199,18 +199,21 @@ class DiskEmbeddingCache:
 
     def get(self, text: str) -> Optional[torch.Tensor]:
         path = self._path(text)
-        if not path.exists():
+        if not os.path.exists(path):
             return None
+
         try:
-            with open(path, "r") as f:
-                return json.load(f)
-        except (JSONDecodeError, OSError) as e:
-            # corrupted cache entry -> delete and treat as miss
+            with open(path, "r", encoding="utf-8") as f:
+                vec = json.load(f)
+        except (JSONDecodeError, OSError):
+            # Corrupted / partially written cache file -> delete and treat as miss
             try:
-                path.unlink()
+                os.remove(path)
             except OSError:
                 pass
             return None
+
+        return torch.tensor(vec, dtype=torch.float32)
 
     def put(self, text: str, emb: torch.Tensor):
         path = self._path(text)
