@@ -344,6 +344,9 @@ class DiskEmbeddingCache:
     def _key(self, text: str) -> str:
         return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
+    def _path(self, text: str) -> str:
+        return os.path.join(self.cache_dir, self._key(text) + ".json")
+
     def get(self, text: str) -> Optional[torch.Tensor]:
         path = self._path(text)
         if not os.path.exists(path):
@@ -363,7 +366,7 @@ class DiskEmbeddingCache:
         return torch.tensor(vec, dtype=torch.float32)
 
     def put(self, text: str, emb: torch.Tensor):
-        path = os.path.join(self.cache_dir, self._key(text) + ".json")
+        path = self._path(text)
         if os.path.exists(path):
             return
         with open(path, "w", encoding="utf-8") as f:
