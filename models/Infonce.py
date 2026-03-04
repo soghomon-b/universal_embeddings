@@ -8,8 +8,8 @@ def train_infonce(batches, d, k, lr=1e-3, epochs=5, tau=0.07, device="cpu"):
     model = LinearProjector(d, k).to(device)
     model.train()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    
-    print(f"running supcon training with {epochs}")
+
+    print(f"running Inforce training with {epochs}")
     for _ in range(epochs):
         for E1, E2 in batches:  # E1,E2: (N,d) where row i matches row i
             if not torch.is_tensor(E1):
@@ -52,6 +52,7 @@ def run_inforce_training_example(
     subset_size: int = 50000,
     d: int = 768,
     k: int = 256,
+    epochs=5,
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
 ):
     cfg = SplitConfig(
@@ -82,7 +83,7 @@ def run_inforce_training_example(
     )
 
     # Train projector (your function)
-    model = train_infonce(train_batches, d=d, k=k, device=device)
+    model = train_infonce(train_batches, d=d, k=k, device=device, epochs=epochs)
 
     return model
 

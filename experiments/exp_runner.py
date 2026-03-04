@@ -27,6 +27,7 @@ def run_experiment(
     r: int,
     num_sentences_for_retreival: int,
 ):
+    print(f"----------------Running Experiment #{exp_number}----------------")
     DATA_DIR = "data/merged.tsv"
     DEVICE_STR = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -39,6 +40,8 @@ def run_experiment(
     tau = 0.07
 
     # ---- Training ----
+    print(f"--------{exp_number}--------Training-------{exp_number}---------")
+    print("--------Geometric--------")
     geometric = run_geometric_training_example(
         tsv_path=DATA_DIR,
         seed=seed,
@@ -54,9 +57,13 @@ def run_experiment(
     # Determine D and K_grad from geometric output
     D, K_grad = geometric.shape
 
-    inforce = run_inforce_training_example(DATA_DIR, seed, data_size, D, K_grad, DEVICE_STR)
-    pairwise = run_pairwise_training_example(DATA_DIR, seed, data_size, D, K_grad, DEVICE_STR)
+    print("--------Inforce--------")
+    inforce = run_inforce_training_example(DATA_DIR, seed, data_size, D, K_grad, epochs, DEVICE_STR,)
+    print("--------pairwise--------")
+    pairwise = run_pairwise_training_example(DATA_DIR, seed, data_size, D, K_grad, epochs, DEVICE_STR)
 
+
+    print("--------supcon--------")
     supcon, languages = run_supcon_training_example(
         tsv_path=DATA_DIR,
         seed=seed,
@@ -90,6 +97,8 @@ def run_experiment(
     }
 
     # ---- Retrieval groups ----
+    print(f"------{exp_number}----------Evaluation------{exp_number}----------")
+    print("--------Eval Data Retreival--------")
     retrieval_groups = extract_parallel_maxcover(
         EVAL_SENTENCES_DIR,
         EVAL_LINKS_DIR,
@@ -101,6 +110,7 @@ def run_experiment(
     retrieval_groups = remove_nones_parallel(retrieval_groups)
 
     # ---- Embedder with cache ----
+    print("--------Eval Data Embedding--------")
     embed_base = OllamaEmbedder(model="granite-embedding:278m")
     cache_dir = os.path.abspath("./emb_cache_granite278m")
     cache = DiskEmbeddingCache(cache_dir)
@@ -108,6 +118,7 @@ def run_experiment(
     embed_fn = torch_embedder_to_numpy(embed_src)
 
     # ---- Eval ----
+    print("--------Running Eval--------")
     out_path = run_full_eval(
         exp_number=exp_number,
         name_to_V=name_to_V,
@@ -120,7 +131,7 @@ def run_experiment(
         seed=seed,
     )
 
-    print(f"Finished Experiment #{exp_number}, Wrote: {out_path}")
+    print(f"----------------Finished Experiment #{exp_number}, Wrote: {out_path}----------------")
     return out_path
 
 
