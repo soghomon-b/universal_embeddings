@@ -19,6 +19,7 @@ Notes:
 
 import os
 import json
+from json import JSONDecodeError
 import random
 import hashlib
 from dataclasses import dataclass
@@ -292,13 +293,20 @@ class DiskEmbeddingCache:
     def _path(self, text: str) -> str:
         return os.path.join(self.cache_dir, self._key(text) + ".json")
 
-    def get(self, text: str) -> Optional[torch.Tensor]:
-        path = self._path(text)
-        if not os.path.exists(path):
+    def get(self, key: str):
+        path = self._key_to_path(key)  # whatever you already do
+        if not path.exists():
             return None
-        with open(path, "r", encoding="utf-8") as f:
-            vec = json.load(f)
-        return torch.tensor(vec, dtype=torch.float32)
+        try:
+            with open(path, "r") as f:
+                return json.load(f)
+        except (JSONDecodeError, OSError) as e:
+            # corrupted cache entry -> delete and treat as miss
+            try:
+                path.unlink()
+            except OSError:
+                pass
+            return None
 
     def put(self, text: str, emb: torch.Tensor):
         path = self._path(text)
