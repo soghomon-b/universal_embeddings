@@ -8,7 +8,8 @@ def train_infonce(batches, d, k, lr=1e-3, epochs=5, tau=0.07, device="cpu"):
     model = LinearProjector(d, k).to(device)
     model.train()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-
+    
+    print(f"running supcon training with {epochs}")
     for _ in range(epochs):
         for E1, E2 in batches:  # E1,E2: (N,d) where row i matches row i
             if not torch.is_tensor(E1):
@@ -28,9 +29,6 @@ def train_infonce(batches, d, k, lr=1e-3, epochs=5, tau=0.07, device="cpu"):
             labels = torch.arange(z1.size(0), device=device)  # [0..N-1]
 
             loss = F.cross_entropy(logits, labels)
-
-            # Optional: symmetric loss (often better)
-            loss = 0.5 * (loss + F.cross_entropy(logits.T, labels))
 
             loss.backward()
             optimizer.step()

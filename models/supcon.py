@@ -456,6 +456,7 @@ def train_supcon(
     model.train()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
+    print(f"running supcon training with {epochs}")
     for _ in range(epochs):
         for E, labels in batches:
             if not torch.is_tensor(E):
