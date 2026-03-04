@@ -53,6 +53,7 @@ def run_inforce_training_example(
     d: int = 768,
     k: int = 256,
     epochs=5,
+    batches=256,
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
 ):
     cfg = SplitConfig(
@@ -79,7 +80,7 @@ def run_inforce_training_example(
 
     # Create an iterator/generator of (E1, E2) batches for InfoNCE training.
     train_batches = make_infonce_batches_from_loader(
-        train_loader, embed_src, embed_tgt, device=device, embed_batch_size=64
+        train_loader, embed_src, embed_tgt, device=device, embed_batch_size=batches
     )
 
     # Train projector (your function)

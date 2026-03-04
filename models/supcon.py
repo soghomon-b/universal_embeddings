@@ -286,13 +286,11 @@ class DiskEmbeddingCache:
         self.cache_dir = cache_dir
         os.makedirs(cache_dir, exist_ok=True)
 
-    @staticmethod
-    def _key(text: str) -> str:
+    def _key(self, text: str) -> str:
         return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
     def _path(self, text: str) -> str:
         return os.path.join(self.cache_dir, self._key(text) + ".json")
-
 
     def get(self, text: str) -> Optional[torch.Tensor]:
         path = self._path(text)
@@ -318,7 +316,6 @@ class DiskEmbeddingCache:
             return
         with open(path, "w", encoding="utf-8") as f:
             json.dump(emb.detach().cpu().tolist(), f)
-
 
 class CachedEmbedder:
     def __init__(
