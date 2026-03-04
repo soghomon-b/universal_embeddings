@@ -29,7 +29,7 @@ run_one () {
 
   "${PYTHON_BIN}" -m "${SCRIPT}" \
     --exp "${exp}" \
-    --seed "${seed}" \
+    --seed 56 \
     --data_size "${data_size}" \
     --epochs "${epochs}" \
     --n_min "${n_min}" \
@@ -41,10 +41,10 @@ run_one () {
 
 # Experiment #  Seed  Data Size  Epochs  n_min  n_max   K   r    # sentence ret
 run_one 11       56    50000      10      100    30000   50  128  200
-run_one 12       43    50000      20      100    30000   50  128  200
-run_one 13       26    50000      25      100    30000   50  128  200
-run_one 14       35    50000      5       100    30000   50  128  200
-run_one 15       16    50000      2       100    30000   50  128  200
-run_one 16       73    50000      40      100    30000   50  128  200
+run_one 12       56    50000      20      100    30000   50  128  200
+run_one 13       56    50000      25      100    30000   50  128  200
+run_one 14       56    50000      5       100    30000   50  128  200
+run_one 15       56    50000      2       100    30000   50  128  200
+run_one 16       56    50000      40      100    30000   50  128  200
 
 echo "Finished batch #${BATCH}"
