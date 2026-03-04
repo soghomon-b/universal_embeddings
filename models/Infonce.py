@@ -53,6 +53,7 @@ def run_inforce_training_example(
     d: int = 768,
     k: int = 256,
     epochs=5,
+    batches=256,
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
 ):
     cfg = SplitConfig(
@@ -83,7 +84,7 @@ def run_inforce_training_example(
     )
 
     # Train projector (your function)
-    model = train_infonce(train_batches, d=d, k=k, device=device, epochs=epochs)
+    model = train_infonce(train_batches, d=d, k=k, device=device, epochs=epochs, batches=batches)
 
     return model
 

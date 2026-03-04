@@ -35,7 +35,7 @@ def run_experiment(
     EVAL_LINKS_DIR = "data/eval/links.csv"
 
     # Other training hyperparams (keep fixed unless you want to expose them too)
-    BATCH = 256
+    BATCH = int(data_size/epochs)
     lr = 1e-3
     tau = 0.07
 
@@ -58,9 +58,9 @@ def run_experiment(
     D, K_grad = geometric.shape
 
     print("--------Inforce--------")
-    inforce = run_inforce_training_example(DATA_DIR, seed, data_size, D, K_grad, epochs, DEVICE_STR,)
+    inforce = run_inforce_training_example(DATA_DIR, seed, data_size, D, K_grad, epochs, BATCH, DEVICE_STR)
     print("--------pairwise--------")
-    pairwise = run_pairwise_training_example(DATA_DIR, seed, data_size, D, K_grad, epochs, DEVICE_STR)
+    pairwise = run_pairwise_training_example(DATA_DIR, seed, data_size, D, K_grad, epochs, BATCH, DEVICE_STR)
 
 
     print("--------supcon--------")

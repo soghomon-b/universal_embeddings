@@ -54,6 +54,7 @@ def run_pairwise_training_example(
     d: int = 768,
     k: int = 256,
     epochs = 5,
+    batches = 256,
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
 ):
     cfg = SplitConfig(
@@ -82,7 +83,7 @@ def run_pairwise_training_example(
     train_batches = make_pairwise_batches_from_loader(
     train_loader, embed_src, embed_tgt, device=device, embed_batch_size=64, neg_ratio=1.0
 )
-    model = train(train_batches, d=d, k=k, device=device, epochs=epochs)
+    model = train(train_batches, d=d, k=k, device=device, epochs=epochs, batches=batches)
 
     return model
 
