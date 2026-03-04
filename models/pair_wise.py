@@ -81,7 +81,7 @@ def run_pairwise_training_example(
 
     # Create an iterator/generator of (E1, E2) batches for InfoNCE training.
     train_batches = make_pairwise_batches_from_loader(
-    train_loader, embed_src, embed_tgt, device=device, embed_batch_size=64, neg_ratio=1.0
+    train_loader, embed_src, embed_tgt, device=device, embed_batch_size=batches, neg_ratio=1.0
 )
     model = train(train_batches, d=d, k=k, device=device, epochs=epochs, batches=batches)
 
