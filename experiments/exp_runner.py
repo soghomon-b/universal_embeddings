@@ -91,6 +91,8 @@ def run_experiment(
     )
 
     name_to_V = {
+        "base": None,
+        "base_abttz": None, 
         "infonce": V_inforce,
         "pairwise": V_pairwise,
         "supcon": V_supcon,
