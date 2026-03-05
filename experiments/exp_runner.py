@@ -45,6 +45,8 @@ def run_experiment(
     print(f"--------{exp_number}--------Training-------{exp_number}---------")
     print("--------Base--------")
     base = run_base_retrieval_example(DATA_DIR, seed=seed,pair_subset_size=BATCH)
+    print("--------Base+ABBT+z--------")
+    base_abttz = run_base_retrieval_example(DATA_DIR, seed=seed,pair_subset_size=BATCH, do_abtt=True)
     print("--------Geometric--------")
     geometric = run_geometric_training_example(
         tsv_path=DATA_DIR,
@@ -93,6 +95,11 @@ def run_experiment(
         if isinstance(base, torch.Tensor)
         else torch.tensor(base, dtype=torch.float32).T
     )
+    V_base_abttz = (
+        base_abttz.detach().clone().float().cpu().T
+        if isinstance(base_abttz, torch.Tensor)
+        else torch.tensor(base_abttz, dtype=torch.float32).T
+    )
     V_geometric = (
         geometric.detach().clone().float().cpu()
         if isinstance(geometric, torch.Tensor)
@@ -100,8 +107,8 @@ def run_experiment(
     )
 
     name_to_V = {
-        "base": None,
-        "base_abttz": V_base, 
+        "base": V_base,
+        "base_abttz": V_base_abttz, 
         "infonce": V_inforce,
         "pairwise": V_pairwise,
         "supcon": V_supcon,
