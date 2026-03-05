@@ -38,38 +38,41 @@ def set_seed(seed: int) -> None:
 # ----------------------------
 # Projection into "universal space"
 # ----------------------------
-
-
 def project_to_universal(
     X: np.ndarray,
-    V: np.ndarray,
-    mode: str = "subspace_coords",
+    V: np.ndarray | None,
+    projection_mode: str = "subspace_coords",
 ) -> np.ndarray:
     """
-    Project base embeddings X into a universal space using V.
+    Project embeddings X into the "universal" space.
 
-    X: [n, d]
-    V:
-      - If mode="linear": V is [d, du] (a linear map W)
-      - If mode="subspace_coords": V is [d, k] (a basis); output is coordinates [n, k]
-      - If mode="subspace_recon": V is [d, k] (a basis); output is reconstruction [n, d]
+    Conventions:
+      - X: [n, d] float32
+      - V: [d, k] float32 projection/basis, OR None for "base" (no projection)
+      - projection_mode:
+          * "subspace_coords": return coordinates in basis (X @ V) -> [n, k]
+          * other modes: keep your existing logic; base should still be handled.
 
-    Returns: projected embeddings, L2-normalized row-wise.
+    Base behavior:
+      - If V is None: return X unchanged (identity / no projection).
+        This makes "base" comparable in the retrieval pipeline.
     """
-    X = np.asarray(X, dtype=np.float32)
-    V = np.asarray(V, dtype=np.float32)
+    if V is None:
+        # Base embeddings: no projection
+        return X
 
-    if mode == "linear":
-        Z = X @ V  # [n, du]
-    elif mode == "subspace_coords":
-        Z = X @ V  # coordinates in basis, [n, k]
-    elif mode == "subspace_recon":
-        # reconstruction back in d-dim: (X V) V^T
-        Z = (X @ V) @ V.T  # [n, d]
-    else:
-        raise ValueError(f"Unknown mode: {mode}")
+    # --- existing behavior ---
+    if projection_mode == "subspace_coords":
+        # coordinates in basis, [n, k]
+        return X @ V
 
-    return l2_normalize(Z, axis=-1)
+    # If you have other projection modes, keep them here.
+    # Example placeholders (replace with your existing implementation):
+    if projection_mode == "subspace_reconstruct":
+        # reconstruct in original space: X @ V @ V^T
+        return (X @ V) @ V.T
+
+    raise ValueError(f"Unknown projection_mode: {projection_mode}")
 
 
 # ----------------------------
