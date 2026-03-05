@@ -44,9 +44,9 @@ def run_experiment(
     # ---- Training ----
     print(f"--------{exp_number}--------Training-------{exp_number}---------")
     print("--------Base--------")
-    base = run_base_retrieval_example(DATA_DIR, seed=seed,pair_subset_size=BATCH)
+    base = run_base_retrieval_example(DATA_DIR, seed=seed,pair_subset_size=int(data_size/epochs))
     print("--------Base+ABBT+z--------")
-    base_abttz = run_base_retrieval_example(DATA_DIR, seed=seed,pair_subset_size=BATCH, do_abtt=True)
+    base_abttz = run_base_retrieval_example(DATA_DIR, seed=seed,pair_subset_size=int(data_size/epochs), do_abtt=True)
     print("--------Geometric--------")
     geometric = run_geometric_training_example(
         tsv_path=DATA_DIR,
