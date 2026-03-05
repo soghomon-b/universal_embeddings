@@ -16,7 +16,7 @@ export NUMEXPR_NUM_THREADS=1
 #
 # Assumes you added argparse main() to experiments/example_exp.py
 # and your venv is already activated (or edit below to source it).
-BATCH="3"
+BATCH="main"
 PYTHON_BIN="${PYTHON_BIN:-python}"
 SCRIPT="experiments.exp_runner"
 
@@ -29,7 +29,7 @@ run_one () {
 
   "${PYTHON_BIN}" -m "${SCRIPT}" \
     --exp "${exp}" \
-    --seed 32 \
+    --seed "${seed}" \
     --data_size "${data_size}" \
     --epochs "${epochs}" \
     --n_min "${n_min}" \
@@ -40,9 +40,14 @@ run_one () {
 }
 
 # Experiment #  Seed  Data Size  Epochs  n_min  n_max   K   r    # sentence ret
-run_one 32       32    200000      5      100    15000   50  128  200
-run_one 33       32    25000      5      100    30000   50  128  200
-run_one 34       32    1000      5       100    30000   50  128  200
-run_one 35      32    50000      5      100    30000   50  128  200
-
+run_one m2       23    1000      10      10000  15000   50  128  2000
+run_one m3       43    2000      10      10000  15000   50  128  2000
+run_one m4       76    5000      10      10000  15000   50  128  2000
+run_one m5       85   10000      10      10000  15000   50  128  2000
+run_one m6       16   20000      10      10000  15000   50  128  2000
+run_one m7       98   40000      10      10000  15000   50  128  2000
+run_one m8       16   60000      10      10000  15000   50  128  2000
+run_one m9        8   80000      10      10000  15000   50  128  2000
+run_one m10      75  100000      10      10000  15000   50  128  2000
+run_one m11      91  150000      10      10000  15000   50  128  2000
 echo "Finished batch #${BATCH}"

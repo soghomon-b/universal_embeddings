@@ -35,7 +35,8 @@ def run_experiment(
     EVAL_LINKS_DIR = "data/eval/links.csv"
 
     # Other training hyperparams (keep fixed unless you want to expose them too)
-    BATCH = int(data_size/epochs)
+    BATCH = 2 * int(data_size/epochs)
+    BATCH = min(BATCH, 5120)
     lr = 1e-3
     tau = 0.07
 
@@ -51,7 +52,7 @@ def run_experiment(
         r=r,
         n_min=n_min,
         n_max=n_max,
-        NUM_RUNS=epochs,
+        NUM_RUNS=2,
     )
 
     # Determine D and K_grad from geometric output
@@ -141,7 +142,7 @@ def run_experiment(
 def main():
     parser = argparse.ArgumentParser(description="Run universal_embeddings experiment.")
 
-    parser.add_argument("--exp", type=int, default=0, help="Experiment number")
+    parser.add_argument("--exp", type=str, default=0, help="Experiment number")
     parser.add_argument("--seed", type=int, default=12, help="Random seed")
     parser.add_argument("--data_size", type=int, default=500, help="Training data subset size")
     parser.add_argument("--epochs", type=int, default=5, help="Number of training epochs/runs")

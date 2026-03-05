@@ -82,7 +82,7 @@ def run_full_eval(
     results_dir: str = "results",
 ) -> str:
     _ensure_dir(results_dir)
-    out_path = os.path.join(results_dir, f"exp_{exp_number:04d}.txt")
+    out_path = os.path.join(results_dir, f"exp_{exp_number}.txt")
 
     # --- CKA
     cka_names, cka_mat = _cka_matrix(name_to_V)
@@ -116,7 +116,7 @@ def run_full_eval(
     # --- Write report
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with open(out_path, "w", encoding="utf-8") as f:
-        f.write(f"Experiment: exp_{exp_number:04d}\n")
+        f.write(f"Experiment: exp_{exp_number}\n")
         f.write(f"Generated:  {now}\n\n")
 
         f.write("=== SETTINGS ===\n")
