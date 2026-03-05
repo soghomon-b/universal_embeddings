@@ -89,9 +89,9 @@ def run_experiment(
 
     # Avoid warning: geometric might already be a tensor
     V_base = (
-        base.detach().clone().float().cpu()
+        base.detach().clone().float().cpu().T
         if isinstance(base, torch.Tensor)
-        else torch.tensor(base, dtype=torch.float32)
+        else torch.tensor(base, dtype=torch.float32).T
     )
     V_geometric = (
         geometric.detach().clone().float().cpu()
