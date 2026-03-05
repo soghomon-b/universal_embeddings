@@ -1,5 +1,5 @@
 Experiment: exp_f2
-Generated:  2026-03-04 18:57:52
+Generated:  2026-03-04 19:38:40
 
 === SETTINGS ===
 projection_mode = subspace_coords
@@ -9,28 +9,30 @@ seed             = 23
 base_abtt_remove = 2
 
 === CKA (between projection matrices V) ===
-               infonce   pairwise     supcon  geometric
-infonce         1.0000     0.1454     0.1479     0.1596
-pairwise        0.1454     1.0000     0.1441     0.1561
-supcon          0.1479     0.1441     1.0000     0.1648
-geometric       0.1596     0.1561     0.1648     1.0000
+                    base  base_abttz     infonce    pairwise      supcon   geometric
+base              1.0000      0.1388      0.0210      0.0153      0.0178      0.0796
+base_abttz        0.1388      1.0000      0.1333      0.1318      0.1392      0.5177
+infonce           0.0210      0.1333      1.0000      0.1454      0.1491      0.1593
+pairwise          0.0153      0.1318      0.1454      1.0000      0.1449      0.1564
+supcon            0.0178      0.1392      0.1491      0.1449      1.0000      0.1706
+geometric         0.0796      0.5177      0.1593      0.1564      0.1706      1.0000
 
 === RETRIEVAL RESULTS ===
 
 [base]
-Accuracy@1: 0.7680
-MRR:        0.8415
-Recall@k:   1:0.7680, 3:0.8880, 5:0.9460
+Accuracy@1: 0.6960
+MRR:        0.7901
+Recall@k:   1:0.6960, 3:0.8440, 5:0.9180
 
 [base_abttz]
-Accuracy@1: 0.0680
-MRR:        0.2499
-Recall@k:   1:0.0680, 3:0.2400, 5:0.3860
+Accuracy@1: 0.0900
+MRR:        0.2755
+Recall@k:   1:0.0900, 3:0.2800, 5:0.4360
 
 [geometric]
 Accuracy@1: 0.7640
-MRR:        0.8430
-Recall@k:   1:0.7640, 3:0.8980, 5:0.9520
+MRR:        0.8406
+Recall@k:   1:0.7640, 3:0.9060, 5:0.9500
 
 [infonce]
 Accuracy@1: 0.7160
@@ -43,6 +45,6 @@ MRR:        0.7999
 Recall@k:   1:0.7140, 3:0.8520, 5:0.9200
 
 [supcon]
-Accuracy@1: 0.7300
-MRR:        0.8135
-Recall@k:   1:0.7300, 3:0.8680, 5:0.9320
+Accuracy@1: 0.7200
+MRR:        0.8037
+Recall@k:   1:0.7200, 3:0.8540, 5:0.9140
