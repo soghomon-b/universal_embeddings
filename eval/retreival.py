@@ -54,29 +54,35 @@ def project_to_universal(
       - If mode="linear": V is [d, du] (a linear map W)
       - If mode="subspace_coords": V is [d, k] (a basis); output is coordinates [n, k]
       - If mode="subspace_recon": V is [d, k] (a basis); output is reconstruction [n, d]
-      - If V is None: no projection (base embeddings)
+      - Base case: V is None (or a 0-d array from None) => no projection
 
     Returns: projected embeddings, L2-normalized row-wise.
     """
-
     X = np.asarray(X, dtype=np.float32)
 
     # --- BASE CASE: no projection ---
+    # Handle both Python None and accidental np.array(None) / 0-d arrays.
     if V is None:
         return l2_normalize(X, axis=-1)
 
+    # If V came in as a numpy scalar/0-d array (e.g., np.asarray(None) somewhere),
+    # treat it as "no projection" as well.
+    if isinstance(V, np.ndarray) and V.ndim == 0:
+        return l2_normalize(X, axis=-1)
+
+    # Now safely cast V to float32 matrix
     V = np.asarray(V, dtype=np.float32)
+
+    # Extra safety: if casting still produced 0-d (shouldn't, but just in case)
+    if V.ndim == 0:
+        return l2_normalize(X, axis=-1)
 
     if mode == "linear":
         Z = X @ V  # [n, du]
-
     elif mode == "subspace_coords":
-        Z = X @ V  # coordinates in basis, [n, k]
-
+        Z = X @ V  # [n, k]
     elif mode == "subspace_recon":
-        # reconstruction back in d-dim: (X V) V^T
         Z = (X @ V) @ V.T  # [n, d]
-
     else:
         raise ValueError(f"Unknown mode: {mode}")
 
