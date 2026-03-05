@@ -82,13 +82,17 @@ def run_experiment(
     )
 
     # ---- V extraction ----
-    V_base = base.proj.weight.detach().float().cpu().T
     V_inforce = inforce.proj.weight.detach().float().cpu().T
     V_pairwise = pairwise.proj.weight.detach().float().cpu().T
     V_supcon = supcon.proj.weight.detach().float().cpu().T
     
 
     # Avoid warning: geometric might already be a tensor
+    V_base = (
+        base.detach().clone().float().cpu()
+        if isinstance(base, torch.Tensor)
+        else torch.tensor(base, dtype=torch.float32)
+    )
     V_geometric = (
         geometric.detach().clone().float().cpu()
         if isinstance(geometric, torch.Tensor)
