@@ -1,0 +1,50 @@
+Experiment: exp_ff18
+Generated:  2026-03-05 18:08:20
+
+=== SETTINGS ===
+projection_mode = subspace_coords
+retrieval_K      = 10
+retrieval_trials = 500
+seed             = 16
+base_abtt_remove = 2
+
+=== CKA (between projection matrices V) ===
+                    base  base_abttz     infonce    pairwise      supcon   geometric
+base              1.0000      0.1297      0.0196      0.0223      0.0159      0.0857
+base_abttz        0.1297      1.0002      0.2425      0.2219      0.2018      0.7592
+infonce           0.0196      0.2425      1.0000      0.3407      0.2184      0.2314
+pairwise          0.0223      0.2219      0.3407      1.0000      0.1913      0.1652
+supcon            0.0159      0.2018      0.2184      0.1913      1.0000      0.1907
+geometric         0.0857      0.7592      0.2314      0.1652      0.1907      1.0000
+
+=== RETRIEVAL RESULTS ===
+
+[base]
+Accuracy@1: 0.6760
+MRR:        0.7813
+Recall@k:   1:0.6760, 3:0.8380, 5:0.9120
+
+[base_abttz]
+Accuracy@1: 0.0840
+MRR:        0.2689
+Recall@k:   1:0.0840, 3:0.2780, 5:0.4080
+
+[geometric]
+Accuracy@1: 0.7300
+MRR:        0.8210
+Recall@k:   1:0.7300, 3:0.8940, 5:0.9560
+
+[infonce]
+Accuracy@1: 0.6760
+MRR:        0.7752
+Recall@k:   1:0.6760, 3:0.8300, 5:0.9140
+
+[pairwise]
+Accuracy@1: 0.5600
+MRR:        0.6752
+Recall@k:   1:0.5600, 3:0.7160, 5:0.8300
+
+[supcon]
+Accuracy@1: 0.7200
+MRR:        0.8058
+Recall@k:   1:0.7200, 3:0.8560, 5:0.9180
