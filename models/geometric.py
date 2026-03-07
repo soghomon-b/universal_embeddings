@@ -443,7 +443,7 @@ def run_geometric_training_example(
     pair_subset_size: int = 50_000,  # sample this many PAIRS from TSV
     sentence_subset_size: int = 100_000,  # after expanding to sentences and shuffling, keep this many
     dedup_sentences: bool = True,
-    ollama_model: str = "granite-embedding:278m",
+    ollama_model: str = "llama3.1:8b",
     cache_dir: str = "./emb_cache_granite278m",
     do_abtt: bool = True,
     abtt_remove: int = 2,
@@ -569,7 +569,7 @@ if __name__ == "__main__":
         pair_subset_size=10,  # sample pairs first
         sentence_subset_size=20,  # then sample sentences (src+tgt)
         dedup_sentences=True,
-        ollama_model="granite-embedding:278m",
+        ollama_model="llama3.1:8b",
         cache_dir="./emb_cache_granite278m",
         do_abtt=True,
         abtt_remove=2,

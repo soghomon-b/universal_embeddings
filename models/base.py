@@ -319,7 +319,7 @@ def run_base_retrieval_example(
     pair_subset_size: Optional[int] = 50_000,   # None => use all
     dedup_pairs: bool = True,
     dedup_on: str = "both",                     # "src" | "tgt" | "both"
-    ollama_model: str = "granite-embedding:278m",
+    ollama_model: str = "llama3.1:8b",
     cache_dir: str = "./emb_cache_granite278m",
     do_abtt: bool = False,                      # True => ABTT+zscore baseline
     abtt_remove: int = 2,
@@ -370,7 +370,7 @@ if __name__ == "__main__":
         pair_subset_size=50_000,
         dedup_pairs=True,
         dedup_on="both",
-        ollama_model="granite-embedding:278m",
+        ollama_model="llama3.1:8b",
         cache_dir="./emb_cache_granite278m",
         do_abtt=False,           # True gives "base+ABTT" baseline
         abtt_remove=2,

@@ -130,7 +130,7 @@ def run_experiment(
 
     # ---- Embedder with cache ----
     print("--------Eval Data Embedding--------")
-    embed_base = OllamaEmbedder(model="granite-embedding:278m")
+    embed_base = OllamaEmbedder(model="llama3.1:8b")
     cache_dir = os.path.abspath("./emb_cache_granite278m")
     cache = DiskEmbeddingCache(cache_dir)
     embed_src = CachedEmbedder(embed_base, cache)

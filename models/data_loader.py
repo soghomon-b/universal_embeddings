@@ -298,7 +298,7 @@ class OllamaEmbedder:
 
     def __init__(
         self,
-        model: str = "granite-embedding:278m",
+        model: str = "llama3.1:8b",
         host: str = "http://localhost:11434",
         timeout: int = 120,
     ):
