@@ -75,7 +75,7 @@ def run_pairwise_training_example(
     # Replace these with real multilingual sentence encoders.
     # For now, they’re dummy embedders to prove the pipeline works.
     embed_base = OllamaEmbedder(model="llama3.1:8b")
-    cache = DiskEmbeddingCache("./emb_cache_granite278m")
+    cache = DiskEmbeddingCache("./emb_cache_llama8b")
     embed_src = CachedEmbedder(embed_base, cache)
     embed_tgt = embed_src  # same cache/model
 

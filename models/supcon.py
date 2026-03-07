@@ -521,7 +521,7 @@ def run_supcon_training_example(
 
     # Ollama embedder + cache (same model for src & tgt)
     embed_base = OllamaEmbedder(model="llama3.1:8b")
-    cache = DiskEmbeddingCache("./emb_cache_granite278m")
+    cache = DiskEmbeddingCache("./emb_cache_llama8b")
     embed_src = CachedEmbedder(embed_base, cache)
     embed_tgt = embed_src
 

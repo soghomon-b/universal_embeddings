@@ -320,7 +320,7 @@ def run_base_retrieval_example(
     dedup_pairs: bool = True,
     dedup_on: str = "both",                     # "src" | "tgt" | "both"
     ollama_model: str = "llama3.1:8b",
-    cache_dir: str = "./emb_cache_granite278m",
+    cache_dir: str = "./emb_cache_llama8b",
     do_abtt: bool = False,                      # True => ABTT+zscore baseline
     abtt_remove: int = 2,
     eval_both_directions: bool = True,          # src->tgt and tgt->src
@@ -371,7 +371,7 @@ if __name__ == "__main__":
         dedup_pairs=True,
         dedup_on="both",
         ollama_model="llama3.1:8b",
-        cache_dir="./emb_cache_granite278m",
+        cache_dir="./emb_cache_llama8b",
         do_abtt=False,           # True gives "base+ABTT" baseline
         abtt_remove=2,
         eval_both_directions=True,

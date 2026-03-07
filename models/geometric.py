@@ -444,7 +444,7 @@ def run_geometric_training_example(
     sentence_subset_size: int = 100_000,  # after expanding to sentences and shuffling, keep this many
     dedup_sentences: bool = True,
     ollama_model: str = "llama3.1:8b",
-    cache_dir: str = "./emb_cache_granite278m",
+    cache_dir: str = "./emb_cache_llama8b",
     do_abtt: bool = True,
     abtt_remove: int = 2,
     # geometric experiment params
@@ -570,7 +570,7 @@ if __name__ == "__main__":
         sentence_subset_size=20,  # then sample sentences (src+tgt)
         dedup_sentences=True,
         ollama_model="llama3.1:8b",
-        cache_dir="./emb_cache_granite278m",
+        cache_dir="./emb_cache_llama8b",
         do_abtt=True,
         abtt_remove=2,
         K=50,
