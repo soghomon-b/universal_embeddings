@@ -36,7 +36,7 @@ def run_experiment(
     EVAL_LINKS_DIR = "data/eval/links.csv"
 
     # Other training hyperparams (keep fixed unless you want to expose them too)
-    BATCH = 2 * int(data_size/epochs)
+    BATCH = int(data_size/epochs)
     BATCH = min(BATCH, 5120)
     lr = 1e-3
     tau = 0.07
@@ -57,7 +57,7 @@ def run_experiment(
         r=r,
         n_min=n_min,
         n_max=n_max,
-        NUM_RUNS=2,
+        NUM_RUNS=epochs,
     )
 
     # Determine D and K_grad from geometric output
