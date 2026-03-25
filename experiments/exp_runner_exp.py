@@ -12,7 +12,7 @@ from models.supcon import run_supcon_training_example
 from eval.process_tatoeba import extract_parallel_maxcover
 from eval.eval_runner import run_full_eval
 from eval.embedder import OllamaEmbedder, DiskEmbeddingCache, CachedEmbedder
-from .utils import remove_nones_parallel, torch_embedder_to_numpy
+from .utils import remove_nones_parallel, torch_embedder_to_numpy, clean_parallel_lang_sentence
 from models.gcca import run_gcca_training_example
 # -----------------------------
 # Experiment runner
@@ -87,7 +87,7 @@ def run_experiment(
     # ---- Retrieval groups ----
     print(f"------{exp_number}----------Evaluation------{exp_number}----------")
     print("--------Eval Data Retreival--------")
-    retrieval_groups = extract_parallel_maxcover(
+    retrieval_groups, retreival_groups_2 = extract_parallel_maxcover(
         EVAL_SENTENCES_DIR,
         EVAL_LINKS_DIR,
         languages,
@@ -96,7 +96,7 @@ def run_experiment(
         fill_missing=None,
     )
     retrieval_groups = remove_nones_parallel(retrieval_groups)
-
+    retreival_groups_2 = clean_parallel_lang_sentence(retreival_groups_2)
     # ---- Embedder with cache ----
     print("--------Eval Data Embedding--------")
     embed_base = OllamaEmbedder(model="granite-embedding:278m")
@@ -113,6 +113,7 @@ def run_experiment(
         embed_fn=embed_fn,
         projection_mode="subspace_coords",
         retrieval_groups=retrieval_groups,
+        retrieval_groups_2 = retreival_groups_2,
         retrieval_langs=None,  # only correct if retrieval_groups are (lang,sent) tuples
         retrieval_K=10,
         retrieval_trials=500,

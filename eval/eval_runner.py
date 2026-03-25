@@ -175,6 +175,7 @@ def run_full_eval(
     embed_fn: Callable[[list[str]], np.ndarray],   # callable(list[str]) -> np.ndarray [n,d]
     projection_mode: str,
     retrieval_groups,  # output of extract_parallel_maxcover
+    retrieval_groups_2,
     retrieval_langs,   # same shape as groups, or None
     retrieval_K: int = 10,
     retrieval_trials: int = 1000,
@@ -215,7 +216,7 @@ def run_full_eval(
 
         if isinstance(ev.V, dict): 
             report = ev.evaluate_2(
-            retrieval_groups,
+            retrieval_groups_2,
             langs=retrieval_langs,
             K=retrieval_K,
             n_trials=retrieval_trials,

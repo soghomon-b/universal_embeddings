@@ -216,65 +216,77 @@ def extract_parallel_maxcover(
     n_sentences: int,
     *,
     min_langs: int = 2,
-    fill_missing: Optional[str] = None,  # None or "" etc.
-) -> List[List[Optional[str]]]:
+    fill_missing: Optional[str] = None,
+) -> Tuple[
+    List[List[Optional[str]]],          # data1 (original format)
+    List[List[Tuple[str, str]]]         # data2 (lang-aware format)
+]:
     """
-    Like extract_parallel, but each returned cluster does NOT need all languages.
-    Instead, we return clusters that cover as many requested languages as possible.
+    Returns:
+      data1: List[List[Optional[str]]]
+          - Same as before (fixed order, may include None)
 
-    Returns: list (length <= n_sentences) of lists (length == len(list_of_languages))
-      - Each inner list is aligned by meaning (connected component).
-      - Missing languages are filled with `fill_missing` (default None).
-      - Clusters are ordered by descending coverage among requested languages.
+      data2: List[List[(lang, sentence)]]
+          - Only includes languages that exist
+          - Explicit language tagging (better for evaluator)
     """
+
     if n_sentences <= 0:
-        return []
+        return [], []
 
     langs = [map_lang(x) for x in list_of_languages]
     needed_langs = set(langs)
 
-    # 1) Read sentences only for requested languages
+    # 1) Read sentences
     sid_to_sent = _read_sentences(sentences_csv, needed_langs)
     if not sid_to_sent:
-        return []
+        return [], []
 
     relevant_nodes = set(sid_to_sent.keys())
 
-    # 2) DSU over edges touching relevant nodes
+    # 2) Build DSU
     dsu = _build_dsu_over_relevant_nodes(links_csv, relevant_nodes)
 
-    # 3) Build component -> lang -> text (keep first text per lang)
+    # 3) Build components
     comp: Dict[int, Dict[str, str]] = {}
     for sid, sent in sid_to_sent.items():
         root = dsu.find(sid)
         d = comp.setdefault(root, {})
-        d.setdefault(sent.lang, sent.text)
+        if sent.lang not in d:
+            d[sent.lang] = sent.text
 
-    # 4) Score components by coverage
-    scored: List[Tuple[int, int]] = []  # (coverage, root)
+    # 4) Score components
+    scored: List[Tuple[int, int]] = []
     for root, lang_to_text in comp.items():
         coverage = sum(1 for l in langs if l in lang_to_text)
         if coverage >= min_langs:
             scored.append((coverage, root))
 
-    # No components with at least min_langs
     if not scored:
-        return []
+        return [], []
 
-    # Sort best coverage first
     scored.sort(key=lambda x: x[0], reverse=True)
 
-    # 5) Produce up to n_sentences results
-    results: List[List[Optional[str]]] = []
+    # 5) Build BOTH outputs
+    data1: List[List[Optional[str]]] = []
+    data2: List[List[Tuple[str, str]]] = []
+
     for coverage, root in scored:
         lang_to_text = comp[root]
-        row = [lang_to_text.get(l, fill_missing) for l in langs]
-        results.append(row)
-        if len(results) >= n_sentences:
+
+        # --- original format ---
+        row1 = [lang_to_text.get(l, fill_missing) for l in langs]
+
+        # --- new format ---
+        row2 = [(l, lang_to_text[l]) for l in langs if l in lang_to_text]
+
+        data1.append(row1)
+        data2.append(row2)
+
+        if len(data1) >= n_sentences:
             break
 
-    return results
-
+    return data1, data2
 
 # ------------------ Example usage ------------------
 if __name__ == "__main__":
