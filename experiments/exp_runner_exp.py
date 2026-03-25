@@ -13,7 +13,7 @@ from eval.process_tatoeba import extract_parallel_maxcover
 from eval.eval_runner import run_full_eval
 from eval.embedder import OllamaEmbedder, DiskEmbeddingCache, CachedEmbedder
 from .utils import remove_nones_parallel, torch_embedder_to_numpy
-from models.ols import run_ols_training_example
+from models.gcca import run_gcca_training_example
 # -----------------------------
 # Experiment runner
 # -----------------------------
@@ -71,14 +71,14 @@ def run_experiment(
         tau=tau,
         device=DEVICE_STR,
     )
-    ols = run_ols_training_example(DATA_DIR, seed)
-    
+   
+    gcca = run_gcca_training_example(DATA_DIR, seed)
 
     # ---- V extraction ----
-    V_ols = ols.proj.weight.T
+    V_gcca = gcca.G.T
     
     name_to_V = {
-        "ols" : V_ols
+        "gcca" : V_gcca
     }
 
     # ---- Retrieval groups ----

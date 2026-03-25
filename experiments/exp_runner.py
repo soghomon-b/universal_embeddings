@@ -9,6 +9,7 @@ from models.Infonce import run_inforce_training_example
 from models.pair_wise import run_pairwise_training_example
 from models.base import run_base_retrieval_example
 from models.supcon import run_supcon_training_example
+from models.ols import run_ols_training_example
 from eval.process_tatoeba import extract_parallel_maxcover
 from eval.eval_runner import run_full_eval
 from eval.embedder import OllamaEmbedder, DiskEmbeddingCache, CachedEmbedder
@@ -43,6 +44,7 @@ def run_experiment(
 
     # ---- Training ----
     print(f"--------{exp_number}--------Training-------{exp_number}---------")
+    
     print("--------Base--------")
     base = run_base_retrieval_example(DATA_DIR, seed=seed,pair_subset_size=int(data_size/epochs))
     print("--------Base+ABBT+z--------")
@@ -83,10 +85,14 @@ def run_experiment(
         device=DEVICE_STR,
     )
 
+    print("--------ols--------")
+    ols = run_ols_training_example(DATA_DIR, seed)
+
     # ---- V extraction ----
     V_inforce = inforce.proj.weight.detach().float().cpu().T
     V_pairwise = pairwise.proj.weight.detach().float().cpu().T
     V_supcon = supcon.proj.weight.detach().float().cpu().T
+    V_ols = ols.proj.weight.detach().float().cpu().T
     
 
     # Avoid warning: geometric might already be a tensor
@@ -113,6 +119,7 @@ def run_experiment(
         "pairwise": V_pairwise,
         "supcon": V_supcon,
         "geometric": V_geometric,
+        "ols" : ols
     }
 
     # ---- Retrieval groups ----
