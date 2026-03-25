@@ -45,78 +45,26 @@ def run_experiment(
     print(f"--------{exp_number}--------Training-------{exp_number}---------")
 
     print("--------OLS--------")
-    ols = run_ols_training_example(DATA_DIR, seed)
-    
-    print("--------Base--------")
-    base = run_base_retrieval_example(DATA_DIR, seed=seed,pair_subset_size=int(data_size/epochs))
-    print("--------Base+ABBT+z--------")
-    base_abttz = run_base_retrieval_example(DATA_DIR, seed=seed,pair_subset_size=int(data_size/epochs), do_abtt=True)
-    print("--------Geometric--------")
-    geometric = run_geometric_training_example(
-        tsv_path=DATA_DIR,
-        seed=seed,
-        pair_subset_size=data_size,
-        sentence_subset_size=data_size * 2,
-        K=K_geo,
-        r=r,
-        n_min=n_min,
-        n_max=n_max,
-        NUM_RUNS=epochs,
-    )
-
-    # Determine D and K_grad from geometric output
-    D, K_grad = geometric.shape
-
-    print("--------Inforce--------")
-    inforce = run_inforce_training_example(DATA_DIR, seed, data_size, D, K_grad, epochs, BATCH, DEVICE_STR)
-    print("--------pairwise--------")
-    pairwise = run_pairwise_training_example(DATA_DIR, seed, data_size, D, K_grad, epochs, BATCH, DEVICE_STR)
-
-
-    print("--------supcon--------")
     supcon, languages = run_supcon_training_example(
         tsv_path=DATA_DIR,
         seed=seed,
         subset_size=data_size,
-        d=D,
-        k=K_grad,
+        d=8,
+        k=10,
         batch_size_pairs=BATCH,
         epochs=epochs,
         lr=lr,
         tau=tau,
         device=DEVICE_STR,
     )
-
-    # ---- V extraction ----
-    V_inforce = inforce.proj.weight.detach().float().cpu().T
-    V_pairwise = pairwise.proj.weight.detach().float().cpu().T
-    V_supcon = supcon.proj.weight.detach().float().cpu().T
+    ols = run_ols_training_example(DATA_DIR, seed)
     
 
-    # Avoid warning: geometric might already be a tensor
-    V_base = (
-        base.detach().clone().float().cpu().T
-        if isinstance(base, torch.Tensor)
-        else torch.tensor(base, dtype=torch.float32).T
-    )
-    V_base_abttz = (
-        base_abttz.detach().clone().float().cpu().T
-        if isinstance(base_abttz, torch.Tensor)
-        else torch.tensor(base_abttz, dtype=torch.float32).T
-    )
-    V_geometric = (
-        geometric.detach().clone().float().cpu()
-        if isinstance(geometric, torch.Tensor)
-        else torch.tensor(geometric, dtype=torch.float32)
-    )
-
+    # ---- V extraction ----
+    V_ols = ols.proj.weight
+    
     name_to_V = {
-        "base": V_base,
-        "base_abttz": V_base_abttz, 
-        "infonce": V_inforce,
-        "pairwise": V_pairwise,
-        "supcon": V_supcon,
-        "geometric": V_geometric,
+        "ols" : V_ols
     }
 
     # ---- Retrieval groups ----
