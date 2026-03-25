@@ -111,6 +111,9 @@ def _cka_matrix(name_to_V: Dict[str, Optional[torch.Tensor]]) -> Tuple[list[str]
             Vb = name_to_V[names[j]]
             assert Va is not None and Vb is not None
 
+            if isinstance(Va, dict) or isinstance(Vb, dict):
+                continue
+
             Va2 = _to_torch_2d(Va)
             Vb2 = _to_torch_2d(Vb)
 
@@ -184,7 +187,7 @@ def run_full_eval(
 
     # --- CKA (projection methods only)
     cka_names, cka_mat = _cka_matrix(name_to_V)
-    cka_text = _format_cka(cka_names, cka_mat)
+    cka_text = "_format_cka(cka_names, cka_mat)"
 
     # --- Retrieval
     retrieval_results: Dict[str, Any] = {}
