@@ -72,7 +72,7 @@ def run_experiment(
         device=DEVICE_STR,
     )
    
-    gcca = run_gcca_training_example(DATA_DIR, seed)
+    gcca = run_gcca_training_example(DATA_DIR, seed, ollama_model="granite-embedding:278m", cache_dir="./emb_cache_granite")
 
     # ---- V extraction ----
     V_gcca = gcca.G.T
