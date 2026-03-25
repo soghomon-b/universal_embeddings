@@ -149,7 +149,10 @@ class UniversalEmbeddingRetrievalEvaluator:
                  (You plug in your LLM encoder here.)
         projection_mode: see project_to_universal
         """
-        self.V = np.asarray(V, dtype=np.float32)
+        if isinstance(V, dict):
+            self.V = {lang: np.asarray(mat, dtype=np.float32) for lang, mat in V.items()}
+        else:
+            self.V = np.asarray(V, dtype=np.float32)
         self.embed_fn = embed_fn
         self.projection_mode = projection_mode
         self.batch_size = batch_size
@@ -481,6 +484,158 @@ class UniversalEmbeddingRetrievalEvaluator:
             n_trials=n_trials,
             details=details if return_details else None,
         )
+    def evaluate_2(
+        self,
+        groups: Sequence[ParallelGroup] | Sequence[ParallelGroupWithLang],
+        *,
+        langs: Optional[Sequence[Sequence[str]]] = None,
+        n_trials: int = 500,
+        K: int = 10,
+        recall_ks: Sequence[int] = (1, 3, 5),
+        seed: int = 0,
+        hard_negatives: bool = False,
+        hard_pool_size: int = 100,
+        return_details: bool = False,
+    ) -> EvalReport:
+        """
+        Same as evaluate(), but expects self.V to be a dict-like object:
+            self.V[lang] -> projection matrix for that language
+
+        Works for methods like GCCA / VecMap where each language has its own map.
+
+        Assumes:
+        - groups/langs provide language for each sentence
+        - each self.V[lang] is compatible with project_to_universal(X, V_lang, ...)
+        """
+        sent_groups, lang_groups = self._prepare_groups(groups, langs)
+
+        if lang_groups is None:
+            raise ValueError(
+                "evaluate_2 requires language information. "
+                "Pass langs=... or use groups formatted as [(lang, sentence), ...]."
+            )
+
+        rng = random.Random(seed)
+
+        flat_indices, flat_sentences, flat_langs = self._index_all_sentences(
+            sent_groups, lang_groups
+        )
+
+        # Optional hard-negative precompute stays in base space, same as evaluate()
+        base_embs_flat = None
+        if hard_negatives:
+            base_embs_flat = self._batched_embed(flat_sentences)
+            base_embs_flat = l2_normalize(base_embs_flat, axis=-1)
+
+        correct1 = 0
+        mrr_sum = 0.0
+        recall_hits = {k: 0 for k in recall_ks}
+        details: List[RetrievalTrialResult] = []
+
+        for _ in range(n_trials):
+            # sample anchor group with at least 2 sentences
+            valid_groups = [gi for gi, g in enumerate(sent_groups) if len(g) >= 2]
+            if not valid_groups:
+                raise ValueError("Need at least one group with 2+ sentences.")
+            anchor_g = rng.choice(valid_groups)
+
+            # sample anchor sentence
+            anchor_s = rng.randrange(len(sent_groups[anchor_g]))
+            anchor = (anchor_g, anchor_s)
+
+            candidates, pos = self._sample_candidate_pool(
+                sent_groups=sent_groups,
+                lang_groups=lang_groups,
+                anchor=anchor,
+                K=K,
+                hard_negatives=hard_negatives,
+                hard_pool_size=hard_pool_size,
+                base_embs_flat=base_embs_flat,
+                flat_indices=flat_indices,
+                flat_langs=flat_langs,
+                rng=rng,
+            )
+
+            # Sentences + langs
+            anchor_sentence = sent_groups[anchor_g][anchor_s]
+            anchor_lang = lang_groups[anchor_g][anchor_s]
+
+            candidate_sentences = [sent_groups[gi][si] for (gi, si) in candidates]
+            candidate_langs = [lang_groups[gi][si] for (gi, si) in candidates]
+
+            # Embed in base space
+            base = self._batched_embed([anchor_sentence] + candidate_sentences)
+            anchor_base = base[0:1]   # [1, d]
+            cand_base = base[1:]      # [K, d]
+
+            # Project anchor with its own language matrix
+            if anchor_lang not in self.V:
+                raise KeyError(f"Missing projection for anchor language: {anchor_lang}")
+
+            anchor_u = project_to_universal(
+                anchor_base,
+                self.V[anchor_lang],
+                mode=self.projection_mode,
+            )[0]  # [du]
+
+            # Project candidates language-by-language
+            cand_u = np.zeros((len(candidates), anchor_u.shape[0]), dtype=np.float32)
+
+            unique_langs = sorted(set(candidate_langs))
+            for lang in unique_langs:
+                if lang not in self.V:
+                    raise KeyError(f"Missing projection for candidate language: {lang}")
+
+                idxs = [i for i, lg in enumerate(candidate_langs) if lg == lang]
+                X_lang = cand_base[idxs]  # [m, d]
+
+                Z_lang = project_to_universal(
+                    X_lang,
+                    self.V[lang],
+                    mode=self.projection_mode,
+                )  # [m, du]
+
+                cand_u[idxs] = Z_lang
+
+            # cosine similarity
+            sims = cosine_sim(anchor_u, cand_u)  # [K]
+
+            # rank
+            order = np.argsort(-sims)
+            ranked_candidates = [candidates[i] for i in order]
+
+            rank = 1 + ranked_candidates.index(pos)
+            is_top1 = rank == 1
+
+            correct1 += int(is_top1)
+            mrr_sum += 1.0 / rank
+            for k in recall_ks:
+                if rank <= k:
+                    recall_hits[k] += 1
+
+            if return_details:
+                details.append(
+                    RetrievalTrialResult(
+                        correct_top1=is_top1,
+                        rank=rank,
+                        group_id=anchor_g,
+                        anchor_idx=anchor_s,
+                        pos_idx=pos[1],
+                        candidate_indices=candidates,
+                    )
+                )
+
+        acc1 = correct1 / n_trials
+        mrr = mrr_sum / n_trials
+        recall = {k: recall_hits[k] / n_trials for k in recall_ks}
+
+        return EvalReport(
+            accuracy_at_1=acc1,
+            mrr=mrr,
+            recall_at_k=recall,
+            n_trials=n_trials,
+            details=details if return_details else None,
+        )
 
 
 # ----------------------------
@@ -532,16 +687,19 @@ if __name__ == "__main__":
         batch_size=64,
     )
 
-    report = evaluator.evaluate(
-        groups,
-        langs=langs,  # omit if you truly don't have language ids
-        K=3,  # candidate pool size per trial
-        n_trials=200,  # increase for real experiments
-        seed=123,
-        hard_negatives=False,  # set True + provide lots of data if you want hard negatives
-        recall_ks=(1, 3, 5),
-        return_details=False,
-    )
+    if isinstance(evaluator.V, dict):
+        report = evaluator.evaluate_2(groups, langs=langs, K=3, n_trials=200, seed=123, hard_negatives=False, recall_ks=(1,3,5), return_details=False)
+    else: 
+        report = evaluator.evaluate(
+            groups,
+            langs=langs,  # omit if you truly don't have language ids
+            K=3,  # candidate pool size per trial
+            n_trials=200,  # increase for real experiments
+            seed=123,
+            hard_negatives=False,  # set True + provide lots of data if you want hard negatives
+            recall_ks=(1, 3, 5),
+            return_details=False,
+        )
 
     print("Accuracy@1:", report.accuracy_at_1)
     print("MRR:", report.mrr)

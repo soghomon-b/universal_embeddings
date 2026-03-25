@@ -44,7 +44,7 @@ def run_experiment(
     # ---- Training ----
     print(f"--------{exp_number}--------Training-------{exp_number}---------")
 
-    print("--------OLS--------")
+    print("--------vecmap--------")
     geometric = run_geometric_training_example(
         tsv_path=DATA_DIR,
         seed=seed,
@@ -75,7 +75,10 @@ def run_experiment(
     gcca = run_gcca_training_example(DATA_DIR, seed, ollama_model="granite-embedding:278m", cache_dir="./emb_cache_granite")
 
     # ---- V extraction ----
-    V_gcca = gcca.G.T
+    V_gcca = {
+        lang: gcca.projs[lang].weight.detach().cpu().numpy().T
+        for lang in gcca.projs
+    }
     
     name_to_V = {
         "gcca" : V_gcca
