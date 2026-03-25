@@ -45,12 +45,26 @@ def run_experiment(
     print(f"--------{exp_number}--------Training-------{exp_number}---------")
 
     print("--------OLS--------")
+    geometric = run_geometric_training_example(
+        tsv_path=DATA_DIR,
+        seed=seed,
+        pair_subset_size=data_size,
+        sentence_subset_size=data_size * 2,
+        K=K_geo,
+        r=r,
+        n_min=n_min,
+        n_max=n_max,
+        NUM_RUNS=epochs,
+    )
+
+    # Determine D and K_grad from geometric output
+    D, K_grad = geometric.shape
     supcon, languages = run_supcon_training_example(
         tsv_path=DATA_DIR,
         seed=seed,
         subset_size=data_size,
-        d=8,
-        k=10,
+        d=D,
+        k=K_grad,
         batch_size_pairs=BATCH,
         epochs=epochs,
         lr=lr,
