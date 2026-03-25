@@ -213,7 +213,19 @@ def run_full_eval(
             batch_size=64,
         )
 
-        report = ev.evaluate(
+        if isinstance(ev.V, dict): 
+            report = ev.evaluate_2(
+            retrieval_groups,
+            langs=retrieval_langs,
+            K=retrieval_K,
+            n_trials=retrieval_trials,
+            seed=seed,
+            hard_negatives=False,
+            recall_ks=(1, 3, 5),
+            return_details=False,
+        )
+        else: 
+            report = ev.evaluate(
             retrieval_groups,
             langs=retrieval_langs,
             K=retrieval_K,
