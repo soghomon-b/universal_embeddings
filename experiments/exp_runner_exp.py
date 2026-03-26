@@ -9,6 +9,7 @@ from models.Infonce import run_inforce_training_example
 from models.pair_wise import run_pairwise_training_example
 from models.vecMap import run_vecmap_training_example
 from models.base import run_base_retrieval_example
+from models.muse import run_bitext_training_example
 from models.supcon import run_supcon_training_example
 from eval.process_tatoeba import extract_parallel_maxcover, map_lang
 from eval.eval_runner import run_full_eval
@@ -74,15 +75,16 @@ def run_experiment(
         device=DEVICE_STR,
     )
 
-    vecMap = run_vecmap_training_example(DATA_DIR, seed, ollama_model="granite-embedding:278m", cache_dir="./emb_cache_granite")
-    # ---- V extraction ----
-    
-    V_vecmap = {
-        map_lang(lang): vecMap.projs[lang].weight.detach().cpu().numpy().T
-        for lang in vecMap.projs
+    muse = run_bitext_training_example(DATA_DIR, seed, ollama_model="granite-embedding:278m", cache_dir="./emb_cache_granite")
+
+    V_muse = {
+        map_lang(lang): muse.projs[lang].weight.detach().cpu().numpy().T
+        for lang in muse.projs
     }
+
+    
     name_to_V = {
-        "vecMap" : V_vecmap
+        "muse" : V_muse
     }
 
     # ---- Retrieval groups ----
