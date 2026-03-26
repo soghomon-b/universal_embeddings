@@ -29,7 +29,7 @@ import torch
 
 from eval.cka import linear_cka_from_embeddings
 from eval.retreival import UniversalEmbeddingRetrievalEvaluator
-
+from models.muse import BitextSentenceEncoder
 
 # -----------------------------
 # utils
@@ -112,6 +112,8 @@ def _cka_matrix(name_to_V: Dict[str, Optional[torch.Tensor]]) -> Tuple[list[str]
             assert Va is not None and Vb is not None
 
             if isinstance(Va, dict) or isinstance(Vb, dict):
+                continue
+            if isinstance(Va, BitextSentenceEncoder) or isinstance(Vb, BitextSentenceEncoder):
                 continue
 
             Va2 = _to_torch_2d(Va)
