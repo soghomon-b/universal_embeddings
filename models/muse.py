@@ -190,6 +190,14 @@ def train_bitext_encoder(
         total_acc_src_to_tgt = 0.0
         total_acc_tgt_to_src = 0.0
         total_batches = 0
+        first_batch = next(iter(train_loader))
+        print(type(first_batch))
+        if isinstance(first_batch, (list, tuple)):
+            print("len =", len(first_batch))
+            for i, x in enumerate(first_batch):
+                print(i, type(x), x[:2] if hasattr(x, "__getitem__") else x)
+        elif isinstance(first_batch, dict):
+            print(first_batch.keys())
 
         for batch_idx, batch in enumerate(train_loader):
             _, src_texts, tgt_texts = batch
