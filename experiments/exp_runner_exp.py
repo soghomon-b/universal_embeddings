@@ -9,10 +9,11 @@ from models.Infonce import run_inforce_training_example
 from models.pair_wise import run_pairwise_training_example
 from models.base import run_base_retrieval_example
 from models.supcon import run_supcon_training_example
-from eval.process_tatoeba import extract_parallel_maxcover
+from eval.process_tatoeba import extract_parallel_maxcover, map_lang
 from eval.eval_runner import run_full_eval
 from eval.embedder import OllamaEmbedder, DiskEmbeddingCache, CachedEmbedder
 from .utils import remove_nones_parallel, torch_embedder_to_numpy, clean_parallel_lang_sentence
+
 from models.gcca import run_gcca_training_example
 # -----------------------------
 # Experiment runner
@@ -76,7 +77,7 @@ def run_experiment(
 
     # ---- V extraction ----
     V_gcca = {
-        lang: gcca.projs[lang].weight.detach().cpu().numpy().T
+        map_lang(lang): gcca.projs[lang].weight.detach().cpu().numpy().T
         for lang in gcca.projs
     }
     
