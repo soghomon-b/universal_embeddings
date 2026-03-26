@@ -10,6 +10,13 @@ def remove_nones_parallel(parallel_lists):
         if any(s is not None for s in group)
     ]
 
+def clean_parallel_lang_sentence(parallel_lists):
+    return [
+        [(lang, s) for (lang, s) in group if s is not None and s != ""]
+        for group in parallel_lists
+        if any(s is not None and s != "" for (_, s) in group)
+    ]
+
 
 def torch_embedder_to_numpy(embedder):
     def _embed_fn(sentences):
