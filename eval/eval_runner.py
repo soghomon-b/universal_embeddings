@@ -204,7 +204,7 @@ def run_full_eval(
         # convert V
         if V_torch is None:
             V = None
-        if  isinstance(V_torch, dict):
+        if  isinstance(V_torch, dict) or isinstance(V_torch, BitextSentenceEncoder):
             V = V_torch
         else:
             V = V_torch.detach().cpu().numpy().astype(np.float32)
