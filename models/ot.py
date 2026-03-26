@@ -202,6 +202,14 @@ def run_sinkhorn_ot_example(
     src_all = []
     tgt_all = []
 
+    first_batch = next(iter(train_loader))
+    print(type(first_batch))
+    if isinstance(first_batch, (list, tuple)):
+        print("len =", len(first_batch))
+        for i, x in enumerate(first_batch):
+            print(i, type(x), x[:2] if hasattr(x, "__getitem__") else x)
+    elif isinstance(first_batch, dict):
+        print(first_batch.keys())
     for batch in train_loader:
         _, src_texts, tgt_texts = batch
 
