@@ -4,8 +4,10 @@ import random
 from dataclasses import dataclass
 from typing import Callable, Iterable, List, Optional, Sequence, Tuple, Dict, Any
 
-import numpy as np
 
+from models.muse import BitextSentenceEncoder
+import numpy as np
+import torch
 
 # ----------------------------
 # Utilities
@@ -601,6 +603,139 @@ class UniversalEmbeddingRetrievalEvaluator:
             sims = cosine_sim(anchor_u, cand_u)  # [K]
 
             # rank
+            order = np.argsort(-sims)
+            ranked_candidates = [candidates[i] for i in order]
+
+            rank = 1 + ranked_candidates.index(pos)
+            is_top1 = rank == 1
+
+            correct1 += int(is_top1)
+            mrr_sum += 1.0 / rank
+            for k in recall_ks:
+                if rank <= k:
+                    recall_hits[k] += 1
+
+            if return_details:
+                details.append(
+                    RetrievalTrialResult(
+                        correct_top1=is_top1,
+                        rank=rank,
+                        group_id=anchor_g,
+                        anchor_idx=anchor_s,
+                        pos_idx=pos[1],
+                        candidate_indices=candidates,
+                    )
+                )
+
+        acc1 = correct1 / n_trials
+        mrr = mrr_sum / n_trials
+        recall = {k: recall_hits[k] / n_trials for k in recall_ks}
+
+        return EvalReport(
+            accuracy_at_1=acc1,
+            mrr=mrr,
+            recall_at_k=recall,
+            n_trials=n_trials,
+            details=details if return_details else None,
+        )
+    
+    def _batched_muse_embed(self, sentences, *, encoder, device="cpu", batch_size=32):
+        import torch
+        all_z = []
+
+        encoder.eval()
+        with torch.no_grad():
+            for i in range(0, len(sentences), batch_size):
+                batch = sentences[i:i+batch_size]
+
+                # adapt this to your model API
+                z = encoder.encode_batch(batch, device=device)   # or your own wrapper
+
+                if isinstance(z, torch.Tensor):
+                    z = z.detach().cpu().numpy()
+
+                all_z.append(z)
+
+        return np.vstack(all_z).astype(np.float32)
+    def evaluate_3(
+        self,
+        groups,
+        *,
+        encoder,
+        langs=None,
+        n_trials: int = 500,
+        K: int = 10,
+        recall_ks=(1, 3, 5),
+        seed: int = 0,
+        hard_negatives: bool = False,
+        hard_pool_size: int = 100,
+        return_details: bool = False,
+        device = "cuda" if torch.cuda.is_available() else "cpu",
+    ):
+        sent_groups, lang_groups = self._prepare_groups(groups, langs)
+        rng = random.Random(seed)
+
+        flat_indices, flat_sentences, flat_langs = self._index_all_sentences(
+            sent_groups, lang_groups
+        )
+
+        base_embs_flat = None
+        if hard_negatives:
+            # for MUSE, the encoder output itself is the base/universal space
+            base_embs_flat = self._batched_muse_embed(
+                flat_sentences, encoder=encoder, device=device
+            )
+            base_embs_flat = l2_normalize(base_embs_flat, axis=-1)
+
+        correct1 = 0
+        mrr_sum = 0.0
+        recall_hits = {k: 0 for k in recall_ks}
+        details = []
+
+        valid_anchors = []
+        for gi, g in enumerate(sent_groups):
+            if len(g) < 2:
+                continue
+            if lang_groups is None:
+                valid_anchors.extend([(gi, si) for si in range(len(g))])
+            else:
+                if len(set(lang_groups[gi])) >= 2:
+                    valid_anchors.extend([(gi, si) for si in range(len(g))])
+
+        if not valid_anchors:
+            raise RuntimeError("No valid anchors.")
+
+        for _ in range(n_trials):
+            anchor = rng.choice(valid_anchors)
+            anchor_g, anchor_s = anchor
+
+            candidates, pos = self._sample_candidate_pool(
+                sent_groups=sent_groups,
+                lang_groups=lang_groups,
+                anchor=anchor,
+                K=K,
+                hard_negatives=hard_negatives,
+                hard_pool_size=hard_pool_size,
+                base_embs_flat=base_embs_flat,
+                flat_indices=flat_indices,
+                flat_langs=flat_langs,
+                rng=rng,
+            )
+
+            anchor_sentence = sent_groups[anchor_g][anchor_s]
+            candidate_sentences = [sent_groups[gi][si] for (gi, si) in candidates]
+
+            Z = self._batched_muse_embed(
+                [anchor_sentence] + candidate_sentences,
+                encoder=encoder,
+                device=device,
+            )
+            Z = l2_normalize(Z, axis=-1)
+
+            anchor_u = Z[0]
+            cand_u = Z[1:]
+
+            sims = cosine_sim(anchor_u, cand_u)
             order = np.argsort(-sims)
             ranked_candidates = [candidates[i] for i in order]
 

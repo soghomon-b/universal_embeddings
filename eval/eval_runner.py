@@ -225,6 +225,17 @@ def run_full_eval(
             recall_ks=(1, 3, 5),
             return_details=False,
         )
+        elif isinstance(ev.V, BitextSentenceEncoder): 
+            report = ev.evaluate_3(
+                    retrieval_groups,
+                    langs=retrieval_langs,
+                    encoder=ev.V,
+                    n_trials=500,
+                    K=10,
+                    recall_ks=(1, 3, 5),
+                    seed=seed
+                )
+
         else: 
             report = ev.evaluate(
             retrieval_groups,
