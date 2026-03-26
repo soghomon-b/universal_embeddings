@@ -11,7 +11,7 @@ from models.vecMap import run_vecmap_training_example
 from models.base import run_base_retrieval_example
 from models.muse import run_bitext_training_example
 from models.supcon import run_supcon_training_example
-from models.ot import run_sinkhorn_ot_example
+from models.ot import SinkhornOT
 from eval.process_tatoeba import extract_parallel_maxcover, map_lang
 from eval.eval_runner import run_full_eval
 from eval.embedder import OllamaEmbedder, DiskEmbeddingCache, CachedEmbedder
@@ -80,7 +80,11 @@ def run_experiment(
     cache_dir = os.path.abspath("./emb_cache_granite")
     cache = DiskEmbeddingCache(cache_dir)
     embed_src = CachedEmbedder(embed_base, cache)
-    V_ot = run_sinkhorn_ot_example(DATA_DIR, seed, embed_src)
+    V_ot = SinkhornOT(
+        reg=0.1,
+        metric="cosine",
+        normalize_inputs=True,
+    )
 
     
     name_to_V = {
