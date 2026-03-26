@@ -29,7 +29,10 @@ import torch
 
 from eval.cka import linear_cka_from_embeddings
 from eval.retreival import UniversalEmbeddingRetrievalEvaluator
+
 from models.muse import BitextSentenceEncoder
+from models.ot import SinkhornOT
+
 
 # -----------------------------
 # utils
@@ -114,6 +117,8 @@ def _cka_matrix(name_to_V: Dict[str, Optional[torch.Tensor]]) -> Tuple[list[str]
             if isinstance(Va, dict) or isinstance(Vb, dict):
                 continue
             if isinstance(Va, BitextSentenceEncoder) or isinstance(Vb, BitextSentenceEncoder):
+                continue
+            if isinstance(Va, SinkhornOT) or isinstance(Vb, SinkhornOT):
                 continue
 
             Va2 = _to_torch_2d(Va)
@@ -204,7 +209,7 @@ def run_full_eval(
         # convert V
         if V_torch is None:
             V = None
-        if  isinstance(V_torch, dict) or isinstance(V_torch, BitextSentenceEncoder):
+        if  isinstance(V_torch, dict) or isinstance(V_torch, BitextSentenceEncoder) or isinstance(V_torch, SinkhornOT):
             V = V_torch
         else:
             V = V_torch.detach().cpu().numpy().astype(np.float32)
@@ -237,6 +242,17 @@ def run_full_eval(
                     recall_ks=(1, 3, 5),
                     seed=seed
                 )
+        elif isinstance(V, SinkhornOT): 
+            report = ev.evaluate_4(
+                retrieval_groups,
+                langs=retrieval_langs,
+                ot_model=ev.V,
+                n_trials=500,
+                K=10,
+                recall_ks=(1, 3, 5),
+                seed=seed,
+                hard_negatives=False,
+            )
 
         else: 
             report = ev.evaluate(

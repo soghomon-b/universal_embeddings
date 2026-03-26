@@ -11,6 +11,7 @@ from models.vecMap import run_vecmap_training_example
 from models.base import run_base_retrieval_example
 from models.muse import run_bitext_training_example
 from models.supcon import run_supcon_training_example
+from models.ot import run_sinkhorn_ot_example
 from eval.process_tatoeba import extract_parallel_maxcover, map_lang
 from eval.eval_runner import run_full_eval
 from eval.embedder import OllamaEmbedder, DiskEmbeddingCache, CachedEmbedder
@@ -75,13 +76,15 @@ def run_experiment(
         device=DEVICE_STR,
     )
 
-    muse = run_bitext_training_example(DATA_DIR, seed, model_name="sentence-transformers/all-MiniLM-L6-v2")
-
-    V_muse = muse
+    embed_base = OllamaEmbedder(model="granite-embedding:278m")
+    cache_dir = os.path.abspath("./emb_cache_granite")
+    cache = DiskEmbeddingCache(cache_dir)
+    embed_src = CachedEmbedder(embed_base, cache)
+    V_ot = run_sinkhorn_ot_example(DATA_DIR, seed, embed_src)
 
     
     name_to_V = {
-        "muse" : V_muse
+        "ot" : V_ot
     }
 
     # ---- Retrieval groups ----
@@ -99,10 +102,6 @@ def run_experiment(
     retreival_groups_2 = clean_parallel_lang_sentence(retreival_groups_2)
     # ---- Embedder with cache ----
     print("--------Eval Data Embedding--------")
-    embed_base = OllamaEmbedder(model="granite-embedding:278m")
-    cache_dir = os.path.abspath("./emb_cache_granite")
-    cache = DiskEmbeddingCache(cache_dir)
-    embed_src = CachedEmbedder(embed_base, cache)
     embed_fn = torch_embedder_to_numpy(embed_src)
 
     # ---- Eval ----
