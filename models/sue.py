@@ -361,7 +361,7 @@ def run_sue_example(
     tgt_all = []
 
     for batch in train_loader:
-        _, src_texts, tgt_texts = batch
+        _, _, src_texts, tgt_texts = batch
 
         X = embedder(src_texts).detach().cpu()
         Y = embedder(tgt_texts).detach().cpu()
