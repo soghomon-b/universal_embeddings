@@ -75,7 +75,7 @@ def run_experiment(
         device=DEVICE_STR,
     )
 
-    muse = run_bitext_training_example(DATA_DIR, seed, model_name="granite-embedding:278m")
+    muse = run_bitext_training_example(DATA_DIR, seed, model_name="sentence-transformers/all-MiniLM-L6-v2")
 
     V_muse = muse
 
