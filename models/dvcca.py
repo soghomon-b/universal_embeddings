@@ -555,7 +555,7 @@ def train_dvcca(
         total_batches = 0
 
         for batch_idx, batch in enumerate(train_loader):
-            _, src_texts, tgt_texts = batch
+            _, _, src_texts, tgt_texts = batch
 
             optimizer.zero_grad()
 
