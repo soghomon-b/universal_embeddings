@@ -80,6 +80,13 @@ def run_experiment(
 
     dvcca = run_dvcca_training_example(DATA_DIR, seed)
 
+    embed_base = OllamaEmbedder(model="granite-embedding:278m")
+    cache_dir = os.path.abspath("./emb_cache_granite")
+    cache = DiskEmbeddingCache(cache_dir)
+    embed_src = CachedEmbedder(embed_base, cache)
+
+    sue = run_sue_example(DATA_DIR, seed, embed_base)
+
     
     name_to_V = {
         
