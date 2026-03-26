@@ -7,6 +7,7 @@ import numpy as np
 from models.geometric import run_geometric_training_example
 from models.Infonce import run_inforce_training_example
 from models.pair_wise import run_pairwise_training_example
+from models.vecMap import run_vecmap_training_example
 from models.base import run_base_retrieval_example
 from models.supcon import run_supcon_training_example
 from eval.process_tatoeba import extract_parallel_maxcover, map_lang
@@ -72,17 +73,16 @@ def run_experiment(
         tau=tau,
         device=DEVICE_STR,
     )
-   
-    gcca = run_gcca_training_example(DATA_DIR, seed, ollama_model="granite-embedding:278m", cache_dir="./emb_cache_granite")
 
+    vecMap = run_vecmap_training_example(DATA_DIR, seed, ollama_model="granite-embedding:278m", cache_dir="./emb_cache_granite")
     # ---- V extraction ----
-    V_gcca = {
-        map_lang(lang): gcca.projs[lang].weight.detach().cpu().numpy().T
-        for lang in gcca.projs
-    }
     
+    V_vecmap = {
+        map_lang(lang): vecMap.projs[lang].weight.detach().cpu().numpy().T
+        for lang in vecMap.projs
+    }
     name_to_V = {
-        "gcca" : V_gcca
+        "vecMap" : V_vecmap
     }
 
     # ---- Retrieval groups ----
