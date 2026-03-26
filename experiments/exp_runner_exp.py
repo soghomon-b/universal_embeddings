@@ -75,7 +75,7 @@ def run_experiment(
         device=DEVICE_STR,
     )
 
-    muse = run_bitext_training_example(DATA_DIR, seed, ollama_model="granite-embedding:278m", cache_dir="./emb_cache_granite")
+    muse = run_bitext_training_example(DATA_DIR, seed, model_name="granite-embedding:278m", cache_dir="./emb_cache_granite")
 
     V_muse = {
         map_lang(lang): muse.projs[lang].weight.detach().cpu().numpy().T
