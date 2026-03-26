@@ -153,6 +153,8 @@ class UniversalEmbeddingRetrievalEvaluator:
         """
         if isinstance(V, dict):
             self.V = {lang: np.asarray(mat, dtype=np.float32) for lang, mat in V.items()}
+        elif isinstance(V, BitextSentenceEncoder):
+            self.V = V
         else:
             self.V = np.asarray(V, dtype=np.float32)
         self.embed_fn = embed_fn
