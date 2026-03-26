@@ -447,7 +447,7 @@ def evaluate_dvcca(
     total_batches = 0
 
     for batch in data_loader:
-        _, src_texts, tgt_texts = batch
+        _, _, src_texts, tgt_texts = batch
 
         outputs = model(src_texts, tgt_texts, device=device)
         losses = dvcca_loss(
