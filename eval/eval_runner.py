@@ -32,6 +32,7 @@ from eval.retreival import UniversalEmbeddingRetrievalEvaluator
 
 from models.muse import BitextSentenceEncoder
 from models.ot import SinkhornOT
+from models.dvcca import BitextDVCCA
 
 
 # -----------------------------
@@ -119,6 +120,8 @@ def _cka_matrix(name_to_V: Dict[str, Optional[torch.Tensor]]) -> Tuple[list[str]
             if isinstance(Va, BitextSentenceEncoder) or isinstance(Vb, BitextSentenceEncoder):
                 continue
             if isinstance(Va, SinkhornOT) or isinstance(Vb, SinkhornOT):
+                continue
+            if isinstance(Va, BitextDVCCA) or isinstance(Vb, BitextDVCCA):
                 continue
 
             Va2 = _to_torch_2d(Va)
@@ -253,6 +256,8 @@ def run_full_eval(
                 seed=seed,
                 hard_negatives=False,
             )
+        elif isinstance(V, BitextDVCCA):
+            report = ev.evaluate_5(retrieval_groups, ev.V, langs=retrieval_langs)
 
         else: 
             report = ev.evaluate(

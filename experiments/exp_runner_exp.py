@@ -85,10 +85,9 @@ def run_experiment(
     cache = DiskEmbeddingCache(cache_dir)
     embed_src = CachedEmbedder(embed_base, cache)
 
-    sue = run_sue_example(DATA_DIR, seed, embed_base)
-
     
     name_to_V = {
+        "dvcca" : dvcca
         
     }
 
