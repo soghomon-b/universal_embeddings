@@ -308,49 +308,59 @@ class DiskEmbeddingCache:
         os.makedirs(cache_dir, exist_ok=True)
 
     def _key(self, text: str) -> str:
-        print(type(text), text[:2] if isinstance(text, list) else text)
+        if not isinstance(text, str):
+            raise TypeError(f"Expected str, got {type(text)}")
         return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
     def _path(self, text: str) -> str:
         return os.path.join(self.cache_dir, self._key(text) + ".json")
 
-    def get(self, text: str) -> Optional[torch.Tensor]:
+    def get(self, text: str):
         path = self._path(text)
         if not os.path.exists(path):
             return None
+        with open(path, "r", encoding="utf-8") as f:
+            return np.array(json.load(f), dtype=np.float32)
 
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                vec = json.load(f)
-        except (JSONDecodeError, OSError):
-            try:
-                os.remove(path)
-            except OSError:
-                pass
-            return None
-
-        return torch.tensor(vec, dtype=torch.float32)
-
-    def put(self, text: str, emb: torch.Tensor):
+    def set(self, text: str, vec):
         path = self._path(text)
-        if os.path.exists(path):
-            return
         with open(path, "w", encoding="utf-8") as f:
-            json.dump(emb.detach().cpu().tolist(), f)
+            json.dump(np.asarray(vec).tolist(), f)
 
 class CachedEmbedder:
-    def __init__(self, base, cache: DiskEmbeddingCache):
+    def __init__(self, base, cache):
         self.base = base
         self.cache = cache
 
-    def __call__(self, text: str) -> torch.Tensor:
-        v = self.cache.get(text)
-        if v is not None:
-            return v
+    def __call__(self, texts):
+        single_input = False
+        if isinstance(texts, str):
+            texts = [texts]
+            single_input = True
 
-        v = self.base.embed_one(text)
-        self.cache.put(text, v)
-        return v
+        results = [None] * len(texts)
+        missing_idx = []
+        missing_texts = []
+
+        for i, text in enumerate(texts):
+            v = self.cache.get(text)
+            if v is not None:
+                results[i] = v
+            else:
+                missing_idx.append(i)
+                missing_texts.append(text)
+
+        if missing_texts:
+            new_vecs = self.base(missing_texts)
+
+            for i, text, vec in zip(missing_idx, missing_texts, new_vecs):
+                self.cache.set(text, vec)
+                results[i] = vec
+
+        if single_input:
+            return results[0]
+
+        return np.stack(results, axis=0)
 
 
 # ============================================================
