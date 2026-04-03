@@ -308,6 +308,7 @@ class DiskEmbeddingCache:
         os.makedirs(cache_dir, exist_ok=True)
 
     def _key(self, text: str) -> str:
+        print(type(text), text[:2] if isinstance(text, list) else text)
         return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
     def _path(self, text: str) -> str:
