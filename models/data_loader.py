@@ -5,6 +5,7 @@ from typing import Callable, Iterable, List, Optional, Sequence, Tuple
 
 import torch
 from json import JSONDecodeError
+import numpy as np
 from torch.utils.data import Dataset, DataLoader
 
 # -----------------------------
