@@ -11,7 +11,6 @@ from torch.utils.data import Dataset, DataLoader
 # 1) TSV sampling + splitting
 # -----------------------------
 
-
 @dataclass
 class SplitConfig:
     subset_size: Optional[int] = None  # e.g., 50000; None => use all
@@ -218,6 +217,8 @@ def make_dummy_embedder(
     return _embed
 
 
+
+
 # -----------------------------
 # 5) End-to-end "prepare data" utility
 # -----------------------------
@@ -286,55 +287,20 @@ def prepare_parallel_data(
 import requests
 import torch
 from typing import List
-
-
-class OllamaEmbedder:
-    """
-    Calls Ollama local embeddings endpoint:
-      POST http://localhost:11434/api/embeddings
-      JSON: { "model": "...", "prompt": "..." }
-    Returns FloatTensor (B, d)
-    """
-
-    def __init__(
-        self,
-        model: str = "llama3.1:8b",
-        host: str = "http://localhost:11434",
-        timeout: int = 120,
-    ):
-        self.model = model
-        self.url = host.rstrip("/") + "/api/embeddings"
-        self.timeout = timeout
-        self._dim = None  # discovered on first call
-
-    def __call__(self, sents: List[str]) -> torch.Tensor:
-        embs = []
-        for s in sents:
-            r = requests.post(
-                self.url,
-                json={"model": self.model, "prompt": s},
-                timeout=self.timeout,
-            )
-            r.raise_for_status()
-            data = r.json()
-            vec = data.get("embedding", None)
-            if vec is None:
-                raise RuntimeError(f"No 'embedding' in response: {data}")
-            if self._dim is None:
-                self._dim = len(vec)
-            embs.append(torch.tensor(vec, dtype=torch.float32))
-        return torch.stack(embs, dim=0)
-
-    @property
-    def dim(self):
-        return self._dim
-
-
-import hashlib
 import os
 import json
-from typing import Dict, Optional
+import hashlib
+from json import JSONDecodeError
+from typing import Optional, Sequence, List
 
+import torch
+import torch.nn.functional as F
+from transformers import AutoTokenizer, AutoModel
+
+
+# ============================================================
+# 1) Disk cache (mostly unchanged)
+# ============================================================
 
 class DiskEmbeddingCache:
     def __init__(self, cache_dir: str):
@@ -356,7 +322,6 @@ class DiskEmbeddingCache:
             with open(path, "r", encoding="utf-8") as f:
                 vec = json.load(f)
         except (JSONDecodeError, OSError):
-            # Corrupted / partially written cache file -> delete and treat as miss
             try:
                 os.remove(path)
             except OSError:
@@ -372,34 +337,130 @@ class DiskEmbeddingCache:
         with open(path, "w", encoding="utf-8") as f:
             json.dump(emb.detach().cpu().tolist(), f)
 
-
 class CachedEmbedder:
-    def __init__(self, base_embedder, cache: DiskEmbeddingCache):
-        self.base = base_embedder
+    def __init__(self, base, cache: DiskEmbeddingCache):
+        self.base = base
         self.cache = cache
 
-    def __call__(self, sents):
-        out = []
-        missing = []
-        missing_idx = []
+    def __call__(self, text: str) -> torch.Tensor:
+        v = self.cache.get(text)
+        if v is not None:
+            return v
 
-        for i, s in enumerate(sents):
-            v = self.cache.get(s)
-            if v is None:
-                missing.append(s)
-                missing_idx.append(i)
-                out.append(None)
-            else:
-                out.append(v)
+        v = self.base.embed_one(text)
+        self.cache.put(text, v)
+        return v
 
-        if missing:
-            new_vecs = self.base(missing)  # (M, d)
-            for j, s in enumerate(missing):
-                self.cache.put(s, new_vecs[j])
-            for pos, vec in zip(missing_idx, new_vecs):
-                out[pos] = vec
 
-        return torch.stack(out, dim=0)
+# ============================================================
+# 2) Local HF embedder (replaces OllamaEmbedder)
+# ============================================================
+
+class HFEmbedder:
+    """
+    Simple Hugging Face embedder using mean pooling over the last hidden state.
+    Works on Narval without Ollama.
+    """
+
+    def __init__(
+        self,
+        model_name: str,
+        device: torch.device,
+        max_length: int = 512,
+        normalize: bool = True,
+    ):
+        self.model_name = model_name
+        self.device = device
+        self.max_length = max_length
+        self.normalize = normalize
+
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.model = AutoModel.from_pretrained(model_name).to(device)
+        self.model.eval()
+
+        self._dim = self.model.config.hidden_size
+
+    @staticmethod
+    def _mean_pool(last_hidden_state: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
+        mask = attention_mask.unsqueeze(-1).expand(last_hidden_state.size()).float()
+        masked = last_hidden_state * mask
+        summed = masked.sum(dim=1)
+        counts = mask.sum(dim=1).clamp(min=1e-9)
+        return summed / counts
+
+    @torch.no_grad()
+    def embed_batch(self, texts: Sequence[str]) -> torch.Tensor:
+        batch = self.tokenizer(
+            list(texts),
+            padding=True,
+            truncation=True,
+            max_length=self.max_length,
+            return_tensors="pt",
+        )
+
+        batch = {k: v.to(self.device) for k, v in batch.items()}
+        outputs = self.model(**batch)
+
+        emb = self._mean_pool(outputs.last_hidden_state, batch["attention_mask"])
+
+        if self.normalize:
+            emb = F.normalize(emb, p=2, dim=1)
+
+        return emb
+
+    @torch.no_grad()
+    def embed_one(self, text: str) -> torch.Tensor:
+        return self.embed_batch([text])[0].detach().cpu()
+
+    @property
+    def dim(self) -> int:
+        return self._dim
+
+
+# ============================================================
+# 3) Cached embedding function
+# ============================================================
+
+def embed_sentences_cached(
+    sentences: Sequence[str],
+    embedder: HFEmbedder,
+    cache: DiskEmbeddingCache,
+    device: torch.device,
+    embed_batch_size: int = 64,
+) -> torch.Tensor:
+    """
+    Returns X: (N, d) on device. Uses per-sentence cache.
+    Missing sentences are embedded in GPU batches.
+    """
+    out: List[Optional[torch.Tensor]] = [None] * len(sentences)
+    missing: List[str] = []
+    missing_idx: List[int] = []
+
+    # Cache lookup
+    for i, s in enumerate(sentences):
+        v = cache.get(s)
+        if v is None:
+            missing.append(s)
+            missing_idx.append(i)
+        else:
+            out[i] = v
+
+    # Embed missing in batches
+    if missing:
+        for j in range(0, len(missing), embed_batch_size):
+            chunk = missing[j : j + embed_batch_size]
+
+            chunk_vecs = embedder.embed_batch(chunk).detach().cpu()
+
+            for s, v in zip(chunk, chunk_vecs):
+                cache.put(s, v)
+
+            for local_k, v in enumerate(chunk_vecs):
+                out_idx = missing_idx[j + local_k]
+                out[out_idx] = v
+
+    X = torch.stack([v for v in out if v is not None], dim=0).to(device)
+    return X
 
 
 def make_pairwise_batches_from_loader(

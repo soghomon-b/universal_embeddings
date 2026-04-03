@@ -31,6 +31,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 
+from .data_loader import (
+    SplitConfig,
+    prepare_parallel_data,
+    HFEmbedder,
+    DiskEmbeddingCache,
+    CachedEmbedder,
+)
+
 
 # ============================================================
 # 0) Projector (replace with your own import if you prefer)
@@ -237,118 +245,8 @@ def prepare_parallel_data(
 
 
 # ============================================================
-# 2) Ollama embeddings + caching
+# 2) embeddings helper
 # ============================================================
-
-
-class OllamaEmbedder:
-    """
-    Calls Ollama embeddings endpoint:
-      POST http://localhost:11434/api/embeddings
-      JSON: { "model": "...", "prompt": "..." }
-    Returns FloatTensor (B, d)
-    """
-
-    def __init__(
-        self,
-        model: str = "llama3.1:8b",
-        host: str = "http://localhost:11434",
-        timeout: int = 120,
-    ):
-        self.model = model
-        self.url = host.rstrip("/") + "/api/embeddings"
-        self.timeout = timeout
-        self._dim: Optional[int] = None
-
-    def __call__(self, sents: List[str]) -> torch.Tensor:
-        embs = []
-        for s in sents:
-            r = requests.post(
-                self.url, json={"model": self.model, "prompt": s}, timeout=self.timeout
-            )
-            r.raise_for_status()
-            data = r.json()
-            vec = data.get("embedding")
-            if vec is None:
-                raise RuntimeError(f"No 'embedding' in response: {data}")
-            if self._dim is None:
-                self._dim = len(vec)
-            embs.append(torch.tensor(vec, dtype=torch.float32))
-        return torch.stack(embs, dim=0)
-
-    @property
-    def dim(self) -> Optional[int]:
-        return self._dim
-
-
-class DiskEmbeddingCache:
-    def __init__(self, cache_dir: str):
-        self.cache_dir = cache_dir
-        os.makedirs(cache_dir, exist_ok=True)
-
-    def _key(self, text: str) -> str:
-        return hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-    def _path(self, text: str) -> str:
-        return os.path.join(self.cache_dir, self._key(text) + ".json")
-
-    def get(self, text: str) -> Optional[torch.Tensor]:
-        path = self._path(text)
-        if not os.path.exists(path):
-            return None
-
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                vec = json.load(f)
-        except (JSONDecodeError, OSError):
-            # Corrupted / partially written cache file -> delete and treat as miss
-            try:
-                os.remove(path)
-            except OSError:
-                pass
-            return None
-
-        return torch.tensor(vec, dtype=torch.float32)
-
-    def put(self, text: str, emb: torch.Tensor):
-        path = self._path(text)
-        if os.path.exists(path):
-            return
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(emb.detach().cpu().tolist(), f)
-
-class CachedEmbedder:
-    def __init__(
-        self,
-        base_embedder: Callable[[List[str]], torch.Tensor],
-        cache: DiskEmbeddingCache,
-    ):
-        self.base = base_embedder
-        self.cache = cache
-
-    def __call__(self, sents: List[str]) -> torch.Tensor:
-        out: List[Optional[torch.Tensor]] = [None] * len(sents)
-        missing: List[str] = []
-        missing_idx: List[int] = []
-
-        for i, s in enumerate(sents):
-            v = self.cache.get(s)
-            if v is None:
-                missing.append(s)
-                missing_idx.append(i)
-            else:
-                out[i] = v
-
-        if missing:
-            new_vecs = self.base(missing)  # (M, d)
-            for j, s in enumerate(missing):
-                self.cache.put(s, new_vecs[j])
-            for idx, vec in zip(missing_idx, new_vecs):
-                out[idx] = vec
-
-        return torch.stack([v for v in out if v is not None], dim=0)
-
-
 @torch.no_grad()
 def embed_sentences_in_batches(
     sentences: List[str],
@@ -503,6 +401,7 @@ def run_supcon_training_example(
     lr: float = 1e-3,
     tau: float = 0.07,
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
+    ollama_model : str = "None"
 ):
     cfg = SplitConfig(
         subset_size=subset_size,
@@ -520,7 +419,7 @@ def run_supcon_training_example(
     )
 
     # Ollama embedder + cache (same model for src & tgt)
-    embed_base = OllamaEmbedder(model="llama3.1:8b")
+    embed_base = HFEmbedder(model=ollama_model, device=device)
     cache = DiskEmbeddingCache("./emb_cache_llama8b")
     embed_src = CachedEmbedder(embed_base, cache)
     embed_tgt = embed_src

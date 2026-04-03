@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from .data_loader import (
     SplitConfig,
     prepare_parallel_data,
-    OllamaEmbedder,
+    HFEmbedder,
     DiskEmbeddingCache,
     CachedEmbedder,
     make_pairwise_batches_from_loader,
@@ -71,6 +71,7 @@ def run_ols_training_example(
     k: int = 256,
     batches=256,
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
+    ollama_model : str = "None"
 ):
 
     cfg = SplitConfig(
@@ -89,8 +90,11 @@ def run_ols_training_example(
         pin_memory=(device.startswith("cuda")),
     )
 
-    embed_base = OllamaEmbedder(model="granite-embedding:278m")
-    cache = DiskEmbeddingCache("./emb_cache_granite")
+    embed_base = HFEmbedder(
+            model_name=ollama_model,
+            device=device,
+        )
+    cache = DiskEmbeddingCache("./emb_cache_llama8b")
     embed_src = CachedEmbedder(embed_base, cache)
     embed_tgt = embed_src
 

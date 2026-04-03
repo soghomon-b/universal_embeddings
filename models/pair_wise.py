@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from .data_loader import (
     SplitConfig,
     prepare_parallel_data,
-    OllamaEmbedder,
+    HFEmbedder,
     DiskEmbeddingCache,
     CachedEmbedder,
     make_pairwise_batches_from_loader,
@@ -56,6 +56,7 @@ def run_pairwise_training_example(
     epochs = 5,
     batches = 256,
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
+    ollama_model : str = "None"
 ):
     cfg = SplitConfig(
         subset_size=subset_size,
@@ -74,7 +75,9 @@ def run_pairwise_training_example(
 
     # Replace these with real multilingual sentence encoders.
     # For now, they’re dummy embedders to prove the pipeline works.
-    embed_base = OllamaEmbedder(model="llama3.1:8b")
+    embed_base = HFEmbedder(
+        model_name=ollama_model,
+        device=device)
     cache = DiskEmbeddingCache("./emb_cache_llama8b")
     embed_src = CachedEmbedder(embed_base, cache)
     embed_tgt = embed_src  # same cache/model

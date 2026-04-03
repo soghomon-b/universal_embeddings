@@ -14,6 +14,15 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 
 
+from .data_loader import (
+    SplitConfig,
+    prepare_parallel_data,
+    HFEmbedder,
+    DiskEmbeddingCache,
+    CachedEmbedder,
+)
+
+
 # ============================================================
 # 1) TSV parsing + splitting
 # ============================================================
@@ -220,120 +229,6 @@ def embed_sentences_in_batches(
         e = e.float().to(device)
         embs.append(e)
     return torch.cat(embs, dim=0)
-
-
-def make_dummy_embedder(
-    d: int = 768,
-    seed: int = 0,
-) -> Callable[[List[str]], torch.Tensor]:
-    rng = torch.Generator().manual_seed(seed)
-
-    def _embed(sents: List[str]) -> torch.Tensor:
-        lens = torch.tensor([len(s) for s in sents], dtype=torch.float32).unsqueeze(1)
-        noise = torch.randn(len(sents), d, generator=rng) * 0.01
-        base = lens.repeat(1, d) / 100.0
-        return (base + noise).float()
-
-    return _embed
-
-
-class OllamaEmbedder:
-    def __init__(
-        self,
-        model: str = "llama3.1:8b",
-        host: str = "http://localhost:11434",
-        timeout: int = 120,
-    ):
-        self.model = model
-        self.url = host.rstrip("/") + "/api/embeddings"
-        self.timeout = timeout
-        self._dim = None
-
-    def __call__(self, sents: List[str]) -> torch.Tensor:
-        embs = []
-        for s in sents:
-            r = requests.post(
-                self.url,
-                json={"model": self.model, "prompt": s},
-                timeout=self.timeout,
-            )
-            r.raise_for_status()
-            data = r.json()
-            vec = data.get("embedding", None)
-            if vec is None:
-                raise RuntimeError(f"No 'embedding' in response: {data}")
-            if self._dim is None:
-                self._dim = len(vec)
-            embs.append(torch.tensor(vec, dtype=torch.float32))
-        return torch.stack(embs, dim=0)
-
-    @property
-    def dim(self):
-        return self._dim
-
-
-class DiskEmbeddingCache:
-    def __init__(self, cache_dir: str):
-        self.cache_dir = cache_dir
-        os.makedirs(cache_dir, exist_ok=True)
-
-    def _key(self, text: str) -> str:
-        return hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-    def _path(self, text: str) -> str:
-        return os.path.join(self.cache_dir, self._key(text) + ".json")
-
-    def get(self, text: str) -> Optional[torch.Tensor]:
-        path = self._path(text)
-        if not os.path.exists(path):
-            return None
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                vec = json.load(f)
-        except (JSONDecodeError, OSError):
-            try:
-                os.remove(path)
-            except OSError:
-                pass
-            return None
-        return torch.tensor(vec, dtype=torch.float32)
-
-    def put(self, text: str, emb: torch.Tensor):
-        path = self._path(text)
-        if os.path.exists(path):
-            return
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(emb.detach().cpu().tolist(), f)
-
-
-class CachedEmbedder:
-    def __init__(self, base_embedder, cache: DiskEmbeddingCache):
-        self.base = base_embedder
-        self.cache = cache
-
-    def __call__(self, sents: List[str]) -> torch.Tensor:
-        out = []
-        missing = []
-        missing_idx = []
-
-        for i, s in enumerate(sents):
-            v = self.cache.get(s)
-            if v is None:
-                missing.append(s)
-                missing_idx.append(i)
-                out.append(None)
-            else:
-                out.append(v)
-
-        if missing:
-            new_vecs = self.base(missing)
-            for j, s in enumerate(missing):
-                self.cache.put(s, new_vecs[j])
-            for pos, vec in zip(missing_idx, new_vecs):
-                out[pos] = vec
-
-        return torch.stack(out, dim=0)
-
 
 # ============================================================
 # 4) Collect per-language views
@@ -656,12 +551,9 @@ def run_vecmap_training_example(
     )
 
     if use_dummy_embedder:
-        embed_fn_by_lang = {
-            lang: make_dummy_embedder(d=d, seed=seed + i)
-            for i, lang in enumerate(languages)
-        }
+        embed_fn_by_lang = None
     else:
-        base = OllamaEmbedder(model=ollama_model)
+        base = HFEmbedder(model=ollama_model, device=device)
         cache = DiskEmbeddingCache(cache_dir)
         embed_fn_by_lang = {
             lang: CachedEmbedder(base, cache)
