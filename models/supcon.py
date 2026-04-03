@@ -419,7 +419,7 @@ def run_supcon_training_example(
     )
 
     # Ollama embedder + cache (same model for src & tgt)
-    embed_base = HFEmbedder(model=ollama_model, device=device)
+    embed_base = HFEmbedder(model_name=ollama_model, device=device)
     cache = DiskEmbeddingCache("./emb_cache_llama8b")
     embed_src = CachedEmbedder(embed_base, cache)
     embed_tgt = embed_src
