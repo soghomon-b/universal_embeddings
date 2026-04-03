@@ -33,6 +33,7 @@ from eval.retreival import UniversalEmbeddingRetrievalEvaluator
 from models.muse import BitextSentenceEncoder
 from models.ot import SinkhornOT
 from models.dvcca import BitextDVCCA
+from models.sue import SUE
 
 
 # -----------------------------
@@ -123,6 +124,8 @@ def _cka_matrix(name_to_V: Dict[str, Optional[torch.Tensor]]) -> Tuple[list[str]
                 continue
             if isinstance(Va, BitextDVCCA) or isinstance(Vb, BitextDVCCA):
                 continue
+            if isinstance(Va, SUE) or isinstance(Vb, SUE):
+                continue
 
             Va2 = _to_torch_2d(Va)
             Vb2 = _to_torch_2d(Vb)
@@ -212,7 +215,7 @@ def run_full_eval(
         # convert V
         if V_torch is None:
             V = None
-        if  isinstance(V_torch, dict) or isinstance(V_torch, BitextSentenceEncoder) or isinstance(V_torch, SinkhornOT):
+        if  isinstance(V_torch, dict) or isinstance(V_torch, BitextSentenceEncoder) or isinstance(V_torch, SinkhornOT) or isinstance(V_torch, SUE) or isinstance(V_torch, BitextDVCCA):
             V = V_torch
         else:
             V = V_torch.detach().cpu().numpy().astype(np.float32)
@@ -258,6 +261,8 @@ def run_full_eval(
             )
         elif isinstance(V, BitextDVCCA):
             report = ev.evaluate_5(retrieval_groups, ev.V, langs=retrieval_langs)
+        elif isinstance(V, SUE):
+            report = ev.evaluate_6(retrieval_groups, ev.V,langs=retrieval_langs)
 
         else: 
             report = ev.evaluate(

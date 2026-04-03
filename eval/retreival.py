@@ -1019,6 +1019,102 @@ class UniversalEmbeddingRetrievalEvaluator:
             n_trials=n_trials,
             details=None,
         )
+    def evaluate_6(
+        self,
+        groups,
+        *,
+        sue_model,
+        embedder,
+        langs=None,
+        n_trials: int = 500,
+        K: int = 10,
+        recall_ks=(1, 3, 5),
+        seed: int = 0,
+        device="cuda" if torch.cuda.is_available() else "cpu",
+    ):
+        sent_groups, lang_groups = self._prepare_groups(groups, langs)
+        rng = random.Random(seed)
+
+        correct1 = 0
+        mrr_sum = 0.0
+        recall_hits = {k: 0 for k in recall_ks}
+
+        valid_anchors = []
+        for gi, g in enumerate(sent_groups):
+            if len(g) < 2:
+                continue
+            if lang_groups is None:
+                valid_anchors.extend([(gi, si) for si in range(len(g))])
+            else:
+                if len(set(lang_groups[gi])) >= 2:
+                    valid_anchors.extend([(gi, si) for si in range(len(g))])
+
+        if not valid_anchors:
+            raise RuntimeError("No valid anchors.")
+
+        sue_model.eval()
+
+        for _ in range(n_trials):
+            anchor = rng.choice(valid_anchors)
+            anchor_g, anchor_s = anchor
+
+            candidates, pos = self._sample_candidate_pool(
+                sent_groups=sent_groups,
+                lang_groups=lang_groups,
+                anchor=anchor,
+                K=K,
+                hard_negatives=False,
+                hard_pool_size=100,
+                base_embs_flat=None,
+                flat_indices=None,
+                flat_langs=None,
+                rng=rng,
+            )
+
+            anchor_sentence = sent_groups[anchor_g][anchor_s]
+            candidate_sentences = [sent_groups[gi][si] for (gi, si) in candidates]
+
+            # Step 1: base embeddings
+            X = embedder([anchor_sentence] + candidate_sentences).to(device)
+
+            # split anchor vs candidates
+            anchor_x = X[0:1]
+            cand_x = X[1:]
+
+            # Step 2: SUE transform (use src side)
+            anchor_z = sue_model.transform_src(anchor_x)
+            cand_z = sue_model.transform_src(cand_x)
+
+            # normalize
+            anchor_z = F.normalize(anchor_z, dim=-1)
+            cand_z = F.normalize(cand_z, dim=-1)
+
+            # similarity + ranking
+            sims = (anchor_z @ cand_z.T).squeeze(0).cpu().numpy()
+            order = np.argsort(-sims)
+            ranked_candidates = [candidates[i] for i in order]
+
+            rank = 1 + ranked_candidates.index(pos)
+            is_top1 = rank == 1
+
+            correct1 += int(is_top1)
+            mrr_sum += 1.0 / rank
+
+            for k in recall_ks:
+                if rank <= k:
+                    recall_hits[k] += 1
+
+        acc1 = correct1 / n_trials
+        mrr = mrr_sum / n_trials
+        recall = {k: recall_hits[k] / n_trials for k in recall_ks}
+
+        return EvalReport(
+            accuracy_at_1=acc1,
+            mrr=mrr,
+            recall_at_k=recall,
+            n_trials=n_trials,
+            details=None,
+        )
 
 
 # ----------------------------

@@ -15,7 +15,7 @@ from models.dvcca import run_dvcca_training_example
 from models.sue import run_sue_example
 from eval.process_tatoeba import extract_parallel_maxcover, map_lang
 from eval.eval_runner import run_full_eval
-from eval.embedder import OllamaEmbedder, DiskEmbeddingCache, CachedEmbedder
+from eval.embedder import HFEmbedder, DiskEmbeddingCache, CachedEmbedder
 from .utils import remove_nones_parallel, torch_embedder_to_numpy, clean_parallel_lang_sentence
 
 from models.gcca import run_gcca_training_example
@@ -39,6 +39,7 @@ def run_experiment(
 
     EVAL_SENTENCES_DIR = "data/eval/sentences.csv"
     EVAL_LINKS_DIR = "data/eval/links.csv"
+    MODEL_NAME = "BAAI/bge-m3"
 
     # Other training hyperparams (keep fixed unless you want to expose them too)
     BATCH = int(data_size/epochs)
@@ -60,6 +61,7 @@ def run_experiment(
         n_min=n_min,
         n_max=n_max,
         NUM_RUNS=epochs,
+        ollama_model=MODEL_NAME
     )
 
     # Determine D and K_grad from geometric output
@@ -75,19 +77,23 @@ def run_experiment(
         lr=lr,
         tau=tau,
         device=DEVICE_STR,
+        ollama_model=MODEL_NAME
     )
 
 
-    dvcca = run_dvcca_training_example(DATA_DIR, seed)
+    dvcca = run_dvcca_training_example(DATA_DIR, seed, model_name=MODEL_NAME)
 
-    embed_base = OllamaEmbedder(model="granite-embedding:278m")
-    cache_dir = os.path.abspath("./emb_cache_granite")
+    embed_base = HFEmbedder(model=MODEL_NAME)
+    cache_dir = os.path.abspath("./emb_cache")
     cache = DiskEmbeddingCache(cache_dir)
     embed_src = CachedEmbedder(embed_base, cache)
 
+    sue = run_sue_example(DATA_DIR, seed, embed_base)
+
     
     name_to_V = {
-        "dvcca" : dvcca
+        "dvcca" : dvcca,
+        "sue" : sue
         
     }
 
