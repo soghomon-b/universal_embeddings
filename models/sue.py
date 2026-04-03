@@ -45,8 +45,16 @@ class SUE(nn.Module):
         if spectralnet_tgt_cfg is None:
             spectralnet_tgt_cfg = {}
 
+        spectralnet_src_cfg = dict(spectralnet_src_cfg)
+        spectralnet_tgt_cfg = dict(spectralnet_tgt_cfg)
+
+        spectralnet_src_cfg.setdefault("n_clusters", n_components)
+        spectralnet_tgt_cfg.setdefault("n_clusters", n_components)
+
         self.spectralnet_src_cfg = spectralnet_src_cfg
         self.spectralnet_tgt_cfg = spectralnet_tgt_cfg
+
+
 
         self.src_model = None
         self.tgt_model = None
