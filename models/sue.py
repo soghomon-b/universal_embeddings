@@ -51,9 +51,24 @@ class SUE(nn.Module):
         spectralnet_src_cfg.setdefault("n_clusters", n_components)
         spectralnet_tgt_cfg.setdefault("n_clusters", n_components)
 
+        # Ensure spectral_hiddens exists and ends with n_clusters
+        src_k = spectralnet_src_cfg["n_clusters"]
+        tgt_k = spectralnet_tgt_cfg["n_clusters"]
+
+        if "spectral_hiddens" not in spectralnet_src_cfg:
+            spectralnet_src_cfg["spectral_hiddens"] = [1024, 512, src_k]
+        else:
+            spectralnet_src_cfg["spectral_hiddens"] = list(spectralnet_src_cfg["spectral_hiddens"])
+            spectralnet_src_cfg["spectral_hiddens"][-1] = src_k
+
+        if "spectral_hiddens" not in spectralnet_tgt_cfg:
+            spectralnet_tgt_cfg["spectral_hiddens"] = [1024, 512, tgt_k]
+        else:
+            spectralnet_tgt_cfg["spectral_hiddens"] = list(spectralnet_tgt_cfg["spectral_hiddens"])
+            spectralnet_tgt_cfg["spectral_hiddens"][-1] = tgt_k
+
         self.spectralnet_src_cfg = spectralnet_src_cfg
         self.spectralnet_tgt_cfg = spectralnet_tgt_cfg
-
 
 
         self.src_model = None
