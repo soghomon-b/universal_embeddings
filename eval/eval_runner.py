@@ -32,7 +32,7 @@ from eval.retreival import UniversalEmbeddingRetrievalEvaluator
 
 from models.muse import BitextSentenceEncoder
 from models.ot import SinkhornOT
-from models.dvcca import BitextDVCCA
+from models.dvcca import BitextDVCCA, CachedBitextDVCCA
 from models.sue import SUE
 
 
@@ -122,7 +122,7 @@ def _cka_matrix(name_to_V: Dict[str, Optional[torch.Tensor]]) -> Tuple[list[str]
                 continue
             if isinstance(Va, SinkhornOT) or isinstance(Vb, SinkhornOT):
                 continue
-            if isinstance(Va, BitextDVCCA) or isinstance(Vb, BitextDVCCA):
+            if isinstance(Va, CachedBitextDVCCA) or isinstance(Vb, CachedBitextDVCCA):
                 continue
             if isinstance(Va, SUE) or isinstance(Vb, SUE):
                 continue
