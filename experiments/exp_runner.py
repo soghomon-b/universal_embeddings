@@ -10,7 +10,13 @@ from models.pair_wise import run_pairwise_training_example
 from models.base import run_base_retrieval_example
 from models.supcon import run_supcon_training_example
 from models.ols import run_ols_training_example
-from eval.process_tatoeba import extract_parallel_maxcover
+from models.gcca import run_gcca_training_example
+from models.vecMap import run_vecmap_training_example
+from models.muse import run_bitext_training_example
+from models.ot import SinkhornOT
+
+
+from eval.process_tatoeba import extract_parallel_maxcover, map_lang
 from eval.eval_runner import run_full_eval
 from eval.embedder import OllamaEmbedder, DiskEmbeddingCache, CachedEmbedder
 from .utils import remove_nones_parallel, torch_embedder_to_numpy
@@ -88,11 +94,36 @@ def run_experiment(
     print("--------ols--------")
     ols = run_ols_training_example(DATA_DIR, seed)
 
+    print("--------gcca--------")
+    gcca = run_gcca_training_example(DATA_DIR, seed)
+
+
+    vecMap = run_vecmap_training_example(DATA_DIR, seed)
+
+    muse = run_bitext_training_example(DATA_DIR, seed, model_name="sentence-transformers/all-MiniLM-L6-v2")
+
+    ot = SinkhornOT(
+        reg=0.1,
+        metric="cosine",
+        normalize_inputs=True,
+    )
+
+
     # ---- V extraction ----
     V_inforce = inforce.proj.weight.detach().float().cpu().T
     V_pairwise = pairwise.proj.weight.detach().float().cpu().T
     V_supcon = supcon.proj.weight.detach().float().cpu().T
     V_ols = ols.proj.weight.detach().float().cpu().T
+    V_gcca = {
+        map_lang(lang): gcca.projs[lang].weight.detach().cpu().numpy().T
+        for lang in gcca.projs
+    }
+    V_vecmap = {
+        map_lang(lang): vecMap.projs[lang].weight.detach().cpu().numpy().T
+        for lang in vecMap.projs
+    }
+    V_muse = muse
+    V_ot = ot
     
 
     # Avoid warning: geometric might already be a tensor
@@ -119,7 +150,11 @@ def run_experiment(
         "pairwise": V_pairwise,
         "supcon": V_supcon,
         "geometric": V_geometric,
-        "ols" : ols
+        "ols" : V_ols,
+        "gcca" : V_gcca,
+        "vecMap": V_vecmap, 
+        "muse" : V_muse, 
+        "ot" : V_ot
     }
 
     # ---- Retrieval groups ----

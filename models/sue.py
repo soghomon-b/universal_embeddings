@@ -48,24 +48,23 @@ class SUE(nn.Module):
         spectralnet_src_cfg = dict(spectralnet_src_cfg)
         spectralnet_tgt_cfg = dict(spectralnet_tgt_cfg)
 
-        spectralnet_src_cfg.setdefault("n_clusters", n_components)
-        spectralnet_tgt_cfg.setdefault("n_clusters", n_components)
+        src_k = spectralnet_src_cfg.get("n_clusters", n_components)
+        tgt_k = spectralnet_tgt_cfg.get("n_clusters", n_components)
 
-        # Ensure spectral_hiddens exists and ends with n_clusters
-        src_k = spectralnet_src_cfg["n_clusters"]
-        tgt_k = spectralnet_tgt_cfg["n_clusters"]
+        spectralnet_src_cfg["n_clusters"] = src_k
+        spectralnet_tgt_cfg["n_clusters"] = tgt_k
 
-        if "spectral_hiddens" not in spectralnet_src_cfg:
-            spectralnet_src_cfg["spectral_hiddens"] = [1024, 512, src_k]
-        else:
-            spectralnet_src_cfg["spectral_hiddens"] = list(spectralnet_src_cfg["spectral_hiddens"])
-            spectralnet_src_cfg["spectral_hiddens"][-1] = src_k
+        src_hiddens = spectralnet_src_cfg.get("spectral_hiddens", [512, 512, src_k])
+        tgt_hiddens = spectralnet_tgt_cfg.get("spectral_hiddens", [512, 512, tgt_k])
 
-        if "spectral_hiddens" not in spectralnet_tgt_cfg:
-            spectralnet_tgt_cfg["spectral_hiddens"] = [1024, 512, tgt_k]
-        else:
-            spectralnet_tgt_cfg["spectral_hiddens"] = list(spectralnet_tgt_cfg["spectral_hiddens"])
-            spectralnet_tgt_cfg["spectral_hiddens"][-1] = tgt_k
+        src_hiddens = list(src_hiddens)
+        tgt_hiddens = list(tgt_hiddens)
+
+        src_hiddens[-1] = src_k
+        tgt_hiddens[-1] = tgt_k
+
+        spectralnet_src_cfg["spectral_hiddens"] = src_hiddens
+        spectralnet_tgt_cfg["spectral_hiddens"] = tgt_hiddens
 
         self.spectralnet_src_cfg = spectralnet_src_cfg
         self.spectralnet_tgt_cfg = spectralnet_tgt_cfg

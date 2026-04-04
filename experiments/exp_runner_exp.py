@@ -82,18 +82,9 @@ def run_experiment(
 
 
     dvcca = run_dvcca_training_example(DATA_DIR, seed, model_name=MODEL_NAME)
-
-    embed_base = HFEmbedder(model_name=MODEL_NAME)
-    cache_dir = os.path.abspath("./emb_cache")
-    cache = DiskEmbeddingCache(cache_dir)
-    embed_src = CachedEmbedder(embed_base, cache)
-
-    sue = run_sue_example(DATA_DIR, seed, embed_base)
-
     
     name_to_V = {
         "dvcca" : dvcca,
-        "sue" : sue
         
     }
 
