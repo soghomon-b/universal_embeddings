@@ -215,7 +215,7 @@ def run_full_eval(
         # convert V
         if V_torch is None:
             V = None
-        if  isinstance(V_torch, dict) or isinstance(V_torch, BitextSentenceEncoder) or isinstance(V_torch, SinkhornOT) or isinstance(V_torch, SUE) or isinstance(V_torch, BitextDVCCA):
+        if  isinstance(V_torch, dict) or isinstance(V_torch, BitextSentenceEncoder) or isinstance(V_torch, SinkhornOT) or isinstance(V_torch, SUE) or isinstance(V_torch, CachedBitextDVCCA):
             V = V_torch
         else:
             V = V_torch.detach().cpu().numpy().astype(np.float32)
@@ -259,7 +259,7 @@ def run_full_eval(
                 seed=seed,
                 hard_negatives=False,
             )
-        elif isinstance(V, BitextDVCCA):
+        elif isinstance(V, CachedBitextDVCCA):
             report = ev.evaluate_5(retrieval_groups, ev.V, langs=retrieval_langs)
         elif isinstance(V, SUE):
             report = ev.evaluate_6(retrieval_groups, ev.V,langs=retrieval_langs)
