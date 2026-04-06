@@ -260,7 +260,11 @@ def run_full_eval(
                 hard_negatives=False,
             )
         elif isinstance(V, CachedBitextDVCCA):
-            report = ev.evaluate_5(retrieval_groups, ev.V, langs=retrieval_langs)
+            report = ev.evaluate_5(
+                retrieval_groups,
+                dvcca_model=ev.V,
+                langs=retrieval_langs
+            )
         elif isinstance(V, SUE):
             report = ev.evaluate_6(retrieval_groups, ev.V,langs=retrieval_langs)
 
