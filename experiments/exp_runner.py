@@ -14,6 +14,7 @@ from models.gcca import run_gcca_training_example
 from models.vecMap import run_vecmap_training_example
 from models.muse import run_bitext_training_example
 from models.ot import SinkhornOT
+from models.dvcca import run_dvcca_training_example
 
 
 from eval.process_tatoeba import extract_parallel_maxcover, map_lang
@@ -37,6 +38,7 @@ def run_experiment(
 ):
     print(f"----------------Running Experiment #{exp_number}----------------")
     DATA_DIR = "data/merged.tsv"
+    MODEL_NAME = "BAAI/bge-m3"
     DEVICE_STR = "cuda" if torch.cuda.is_available() else "cpu"
 
     EVAL_SENTENCES_DIR = "data/eval/sentences.csv"
@@ -72,9 +74,9 @@ def run_experiment(
     D, K_grad = geometric.shape
 
     print("--------Inforce--------")
-    inforce = run_inforce_training_example(DATA_DIR, seed, data_size, D, K_grad, epochs, BATCH, DEVICE_STR)
+    inforce = run_inforce_training_example(DATA_DIR, seed, data_size, D, K_grad, epochs, BATCH, DEVICE_STR, ollama_model=MODEL_NAME)
     print("--------pairwise--------")
-    pairwise = run_pairwise_training_example(DATA_DIR, seed, data_size, D, K_grad, epochs, BATCH, DEVICE_STR)
+    pairwise = run_pairwise_training_example(DATA_DIR, seed, data_size, D, K_grad, epochs, BATCH, DEVICE_STR, ollama_model=MODEL_NAME)
 
 
     print("--------supcon--------")
@@ -89,24 +91,27 @@ def run_experiment(
         lr=lr,
         tau=tau,
         device=DEVICE_STR,
+        ollama_model=MODEL_NAME
     )
 
     print("--------ols--------")
-    ols = run_ols_training_example(DATA_DIR, seed)
+    ols = run_ols_training_example(DATA_DIR, seed, ollama_model=MODEL_NAME)
 
     print("--------gcca--------")
-    gcca = run_gcca_training_example(DATA_DIR, seed)
+    gcca = run_gcca_training_example(DATA_DIR, seed, ollama_model=MODEL_NAME)
 
 
-    vecMap = run_vecmap_training_example(DATA_DIR, seed)
+    vecMap = run_vecmap_training_example(DATA_DIR, seed, ollama_model=MODEL_NAME)
 
-    muse = run_bitext_training_example(DATA_DIR, seed, model_name="sentence-transformers/all-MiniLM-L6-v2")
+    muse = run_bitext_training_example(DATA_DIR, seed, model_name=MODEL_NAME)
 
     ot = SinkhornOT(
         reg=0.1,
         metric="cosine",
         normalize_inputs=True,
     )
+
+    dvcca = run_dvcca_training_example(DATA_DIR, seed, model_name=MODEL_NAME)
 
 
     # ---- V extraction ----
@@ -124,6 +129,7 @@ def run_experiment(
     }
     V_muse = muse
     V_ot = ot
+    V_dvcca = dvcca
     
 
     # Avoid warning: geometric might already be a tensor
@@ -154,7 +160,8 @@ def run_experiment(
         "gcca" : V_gcca,
         "vecMap": V_vecmap, 
         "muse" : V_muse, 
-        "ot" : V_ot
+        "ot" : V_ot, 
+        "dvcca" : V_dvcca
     }
 
     # ---- Retrieval groups ----

@@ -80,11 +80,16 @@ def run_experiment(
         ollama_model=MODEL_NAME
     )
 
+    embed_base = HFEmbedder(model_name=MODEL_NAME)
+    cache_dir = os.path.abspath("./emb_cache")
+    cache = DiskEmbeddingCache(cache_dir)
+    embed_src = CachedEmbedder(embed_base, cache)
 
-    dvcca = run_dvcca_training_example(DATA_DIR, seed, model_name=MODEL_NAME)
+    sue = run_sue_example(DATA_DIR, seed, embed_base)
+
     
     name_to_V = {
-        "dvcca" : dvcca
+        "sue" : sue
         
     }
 
@@ -103,11 +108,6 @@ def run_experiment(
     retreival_groups_2 = clean_parallel_lang_sentence(retreival_groups_2)
     # ---- Embedder with cache ----
     print("--------Eval Data Embedding--------")
-    
-    embed_base = HFEmbedder(model_name=MODEL_NAME)
-    cache_dir = os.path.abspath("./emb_cache")
-    cache = DiskEmbeddingCache(cache_dir)
-    embed_src = CachedEmbedder(embed_base, cache)
     embed_fn = torch_embedder_to_numpy(embed_src)
 
     # ---- Eval ----
