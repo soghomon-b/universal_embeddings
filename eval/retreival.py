@@ -942,12 +942,14 @@ class UniversalEmbeddingRetrievalEvaluator:
         sent_groups, lang_groups = self._prepare_groups(groups, langs)
         rng = random.Random(seed)
 
+        flat_indices, flat_sentences, flat_langs = self._index_all_sentences(
+            sent_groups, lang_groups
+        )
+
         correct1 = 0
         mrr_sum = 0.0
         recall_hits = {k: 0 for k in recall_ks}
-        details = []
 
-        # valid anchors (same logic as evaluate_3)
         valid_anchors = []
         for gi, g in enumerate(sent_groups):
             if len(g) < 2:
@@ -972,37 +974,37 @@ class UniversalEmbeddingRetrievalEvaluator:
                 lang_groups=lang_groups,
                 anchor=anchor,
                 K=K,
-                hard_negatives=False,  # optional later
+                hard_negatives=False,
                 hard_pool_size=100,
                 base_embs_flat=None,
-                flat_indices=None,
-                flat_langs=None,
+                flat_indices=flat_indices,
+                flat_langs=flat_langs,
                 rng=rng,
             )
 
             anchor_sentence = sent_groups[anchor_g][anchor_s]
             candidate_sentences = [sent_groups[gi][si] for (gi, si) in candidates]
 
-            # 🔥 DVCCA encoding
             Z = dvcca_model.encode_shared_texts(
                 [anchor_sentence] + candidate_sentences,
                 device=device,
-                view="src",   # or "tgt" depending on your setup
+                view="src",
             )
+
+            if isinstance(Z, np.ndarray):
+                Z = torch.from_numpy(Z).to(device)
 
             Z = F.normalize(Z, dim=-1)
 
-            anchor_u = Z[0]
-            cand_u = Z[1:]
+            anchor_u = Z[0:1]          # [1, d]
+            cand_u = Z[1:]             # [K, d]
 
-            sims = (anchor_u @ cand_u.T).cpu().numpy()
+            sims = (anchor_u @ cand_u.T).squeeze(0).detach().cpu().numpy()
             order = np.argsort(-sims)
             ranked_candidates = [candidates[i] for i in order]
 
             rank = 1 + ranked_candidates.index(pos)
-            is_top1 = rank == 1
-
-            correct1 += int(is_top1)
+            correct1 += int(rank == 1)
             mrr_sum += 1.0 / rank
 
             for k in recall_ks:
