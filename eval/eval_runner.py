@@ -1,24 +1,15 @@
 # eval/eval_runner.py
 #
 # Revised to support:
+#   - retrieval evaluation
+#   - within-group cosine-distance evaluation in universal space
 #   - "base" (no projection; uses raw embeddings)
-#   - "base_abttz" (no projection; apply ABTT+zscore to embeddings before retrieval)
-# alongside your existing methods that provide projection matrices V (shape [d,k]).
+#   - "base_abttz" (no projection; apply ABTT+zscore to embeddings before eval)
 #
-# Output format:
-# === RETRIEVAL RESULTS ===
-# [base] ...
-# [base_abttz] ...
-# [geometric] ...
-# [infonce] ...
-# [pairwise] ...
-# [supcon] ...
-#
-# Notes:
-# - CKA is only computed between methods that actually have a V (base/base_abttz excluded).
-# - ABTT+zscore is applied per-evaluation-call on the embedded sentences (not on training TSV).
-# - This assumes your UniversalEmbeddingRetrievalEvaluator can handle V=None (no projection).
-#   If it can't, see the fallback comment in _make_evaluator() below.
+# IMPORTANT:
+# Put the distance evaluator file somewhere importable, e.g.
+#   eval/universal_embedding_distance_eval.py
+# so the import below works.
 
 import os
 from datetime import datetime
@@ -29,11 +20,11 @@ import torch
 
 from eval.cka import linear_cka_from_embeddings
 from eval.retreival import UniversalEmbeddingRetrievalEvaluator
+from eval.universal_embedding_distance_eval import UniversalEmbeddingDistanceEvaluator
 
 from models.muse import BitextSentenceEncoder
 from models.ot import SinkhornOT
 from models.dvcca import BitextDVCCA, CachedBitextDVCCA
-from models.sue import SUE
 
 
 # -----------------------------
@@ -69,7 +60,6 @@ def abtt_and_zscore_torch(X: torch.Tensor, n_remove: int = 2) -> torch.Tensor:
 
     n_samples, d = X_centered.shape
     q = min(max(n_remove + 2, n_remove), min(n_samples, d))
-    # torch.pca_lowrank expects (N,d)
     _, _, V = torch.pca_lowrank(X_centered, q=q)  # V: (d, q)
 
     comps = V[:, :n_remove].T  # (n_remove, d)
@@ -90,7 +80,7 @@ def _wrap_embed_fn_with_abttz(
     Uses torch for PCA, returns numpy float32.
     """
     def wrapped(sentences: list[str]) -> np.ndarray:
-        E = embed_fn(sentences)  # (n,d) np
+        E = embed_fn(sentences)
         Et = torch.tensor(E, dtype=torch.float32)
         Et2 = abtt_and_zscore_torch(Et, n_remove=n_remove)
         return Et2.cpu().numpy().astype(np.float32)
@@ -124,8 +114,6 @@ def _cka_matrix(name_to_V: Dict[str, Optional[torch.Tensor]]) -> Tuple[list[str]
                 continue
             if isinstance(Va, CachedBitextDVCCA) or isinstance(Vb, CachedBitextDVCCA):
                 continue
-            if isinstance(Va, SUE) or isinstance(Vb, SUE):
-                continue
 
             Va2 = _to_torch_2d(Va)
             Vb2 = _to_torch_2d(Vb)
@@ -155,22 +143,31 @@ def _format_cka(names: list[str], M: torch.Tensor) -> str:
 
 
 # -----------------------------
-# evaluator factory (supports base via V=None)
+# evaluator factories
 # -----------------------------
-def _make_evaluator(
+def _make_retrieval_evaluator(
     *,
     V: Optional[np.ndarray],
     embed_fn: Callable[[list[str]], np.ndarray],
     projection_mode: str,
     batch_size: int = 64,
 ) -> UniversalEmbeddingRetrievalEvaluator:
-    """
-    Requires UniversalEmbeddingRetrievalEvaluator to accept V=None as 'no projection'.
-    If your evaluator DOES NOT support that, you have two options:
-      (1) modify the evaluator to treat V=None as identity/no-projection (recommended), OR
-      (2) pass an identity matrix as V and ensure projection_mode behaves like identity.
-    """
     return UniversalEmbeddingRetrievalEvaluator(
+        V=V,
+        embed_fn=embed_fn,
+        projection_mode=projection_mode,
+        batch_size=batch_size,
+    )
+
+
+def _make_distance_evaluator(
+    *,
+    V: Optional[np.ndarray],
+    embed_fn: Callable[[list[str]], np.ndarray],
+    projection_mode: str,
+    batch_size: int = 64,
+) -> UniversalEmbeddingDistanceEvaluator:
+    return UniversalEmbeddingDistanceEvaluator(
         V=V,
         embed_fn=embed_fn,
         projection_mode=projection_mode,
@@ -184,103 +181,170 @@ def _make_evaluator(
 def run_full_eval(
     *,
     exp_number: int,
-    name_to_V: Dict[str, Optional[torch.Tensor]],  # V is [d,k] torch on CPU, or None for base
-    embed_fn: Callable[[list[str]], np.ndarray],   # callable(list[str]) -> np.ndarray [n,d]
+    name_to_V: Dict[str, Optional[torch.Tensor]],
+    embed_fn: Callable[[list[str]], np.ndarray],
     projection_mode: str,
-    retrieval_groups,  # output of extract_parallel_maxcover
+    retrieval_groups,
     retrieval_groups_2,
-    retrieval_langs,   # same shape as groups, or None
+    retrieval_langs,
     retrieval_K: int = 10,
     retrieval_trials: int = 1000,
+    distance_require_different_langs: bool = True,
+    distance_return_group_summaries: bool = False,
     seed: int = 0,
     results_dir: str = "results",
-    base_abtt_remove: int = 2,  # ABTT remove count used for base_abttz
+    base_abtt_remove: int = 2,
 ) -> str:
     _ensure_dir(results_dir)
     out_path = os.path.join(results_dir, f"exp_{exp_number}.txt")
 
     # --- CKA (projection methods only)
     cka_names, cka_mat = _cka_matrix(name_to_V)
-    cka_text = "_format_cka(cka_names, cka_mat)"
+    cka_text = _format_cka(cka_names, cka_mat)
 
     # --- Retrieval
     retrieval_results: Dict[str, Any] = {}
 
+    # --- Distance
+    distance_results: Dict[str, Any] = {}
+
     for name, V_torch in name_to_V.items():
-        # pick embed_fn variant
         local_embed_fn = embed_fn
         if name in ("base_abttz", "base+abtt+z", "base_abtt+z", "base_abttz+z"):
             local_embed_fn = _wrap_embed_fn_with_abttz(embed_fn, n_remove=base_abtt_remove)
 
-        # convert V
         if V_torch is None:
             V = None
-        if  isinstance(V_torch, dict) or isinstance(V_torch, BitextSentenceEncoder) or isinstance(V_torch, SinkhornOT) or isinstance(V_torch, SUE) or isinstance(V_torch, CachedBitextDVCCA):
+        elif (
+            isinstance(V_torch, dict)
+            or isinstance(V_torch, BitextSentenceEncoder)
+            or isinstance(V_torch, SinkhornOT)
+            or isinstance(V_torch, CachedBitextDVCCA)
+        ):
             V = V_torch
         else:
             V = V_torch.detach().cpu().numpy().astype(np.float32)
 
-        ev = _make_evaluator(
+        retrieval_ev = _make_retrieval_evaluator(
+            V=V,
+            embed_fn=local_embed_fn,
+            projection_mode=projection_mode,
+            batch_size=64,
+        )
+        distance_ev = _make_distance_evaluator(
             V=V,
             embed_fn=local_embed_fn,
             projection_mode=projection_mode,
             batch_size=64,
         )
 
-        if isinstance(ev.V, dict): 
-            report = ev.evaluate_2(
-            retrieval_groups_2,
-            langs=retrieval_langs,
-            K=retrieval_K,
-            n_trials=retrieval_trials,
-            seed=seed,
-            hard_negatives=False,
-            recall_ks=(1, 3, 5),
-            return_details=False,
-        )
-        elif isinstance(ev.V, BitextSentenceEncoder): 
-            report = ev.evaluate_3(
-                    retrieval_groups,
-                    langs=retrieval_langs,
-                    encoder=ev.V,
-                    n_trials=500,
-                    K=10,
-                    recall_ks=(1, 3, 5),
-                    seed=seed
-                )
-        elif isinstance(V, SinkhornOT): 
-            report = ev.evaluate_4(
+        # -----------------
+        # Retrieval
+        # -----------------
+        if isinstance(retrieval_ev.V, dict):
+            retrieval_report = retrieval_ev.evaluate_2(
+                retrieval_groups_2,
+                langs=retrieval_langs,
+                K=retrieval_K,
+                n_trials=retrieval_trials,
+                seed=seed,
+                hard_negatives=False,
+                recall_ks=(1, 3, 5),
+                return_details=False,
+            )
+        elif isinstance(retrieval_ev.V, BitextSentenceEncoder):
+            retrieval_report = retrieval_ev.evaluate_3(
                 retrieval_groups,
                 langs=retrieval_langs,
-                ot_model=ev.V,
-                n_trials=500,
-                K=10,
+                encoder=retrieval_ev.V,
+                n_trials=retrieval_trials,
+                K=retrieval_K,
+                recall_ks=(1, 3, 5),
+                seed=seed,
+            )
+        elif isinstance(V, SinkhornOT):
+            retrieval_report = retrieval_ev.evaluate_4(
+                retrieval_groups,
+                langs=retrieval_langs,
+                ot_model=retrieval_ev.V,
+                n_trials=retrieval_trials,
+                K=retrieval_K,
                 recall_ks=(1, 3, 5),
                 seed=seed,
                 hard_negatives=False,
             )
         elif isinstance(V, CachedBitextDVCCA):
-            report = ev.evaluate_5(
+            retrieval_report = retrieval_ev.evaluate_5(
                 retrieval_groups,
-                dvcca_model=ev.V,
-                langs=retrieval_langs
+                dvcca_model=retrieval_ev.V,
+                langs=retrieval_langs,
+                n_trials=retrieval_trials,
+                K=retrieval_K,
+                recall_ks=(1, 3, 5),
+                seed=seed,
             )
-        elif isinstance(V, SUE):
-            report = ev.evaluate_6(retrieval_groups, ev.V,langs=retrieval_langs)
+        else:
+            retrieval_report = retrieval_ev.evaluate(
+                retrieval_groups,
+                langs=retrieval_langs,
+                K=retrieval_K,
+                n_trials=retrieval_trials,
+                seed=seed,
+                hard_negatives=False,
+                recall_ks=(1, 3, 5),
+                return_details=False,
+            )
 
-        else: 
-            report = ev.evaluate(
-            retrieval_groups,
-            langs=retrieval_langs,
-            K=retrieval_K,
-            n_trials=retrieval_trials,
-            seed=seed,
-            hard_negatives=False,
-            recall_ks=(1, 3, 5),
-            return_details=False,
-        )
+        retrieval_results[name] = retrieval_report
 
-        retrieval_results[name] = report
+        # -----------------
+        # Distance
+        # -----------------
+        if isinstance(distance_ev.V, dict):
+            distance_report = distance_ev.evaluate_2(
+                retrieval_groups_2,
+                langs=retrieval_langs,
+                require_different_langs=distance_require_different_langs,
+                return_details=False,
+                return_group_summaries=distance_return_group_summaries,
+            )
+        elif isinstance(distance_ev.V, BitextSentenceEncoder):
+            distance_report = distance_ev.evaluate_3(
+                retrieval_groups,
+                langs=retrieval_langs,
+                encoder=distance_ev.V,
+                require_different_langs=distance_require_different_langs,
+                return_details=False,
+                return_group_summaries=distance_return_group_summaries,
+            )
+        elif isinstance(V, SinkhornOT):
+            distance_report = distance_ev.evaluate_4(
+                retrieval_groups,
+                langs=retrieval_langs,
+                ot_model=distance_ev.V,
+                require_different_langs=distance_require_different_langs,
+                return_details=False,
+                return_group_summaries=distance_return_group_summaries,
+            )
+        elif isinstance(V, CachedBitextDVCCA):
+            distance_report = distance_ev.evaluate_5(
+                retrieval_groups,
+                dvcca_model=distance_ev.V,
+                langs=retrieval_langs,
+                require_different_langs=distance_require_different_langs,
+                return_details=False,
+                return_group_summaries=distance_return_group_summaries,
+            )
+        else:
+            distance_report = distance_ev.evaluate(
+                retrieval_groups,
+                langs=retrieval_langs,
+                require_different_langs=distance_require_different_langs,
+                return_details=False,
+                return_group_summaries=distance_return_group_summaries,
+            )
+
+        distance_results[name] = distance_report
 
     # --- Write report
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -289,11 +353,13 @@ def run_full_eval(
         f.write(f"Generated:  {now}\n\n")
 
         f.write("=== SETTINGS ===\n")
-        f.write(f"projection_mode = {projection_mode}\n")
-        f.write(f"retrieval_K      = {retrieval_K}\n")
-        f.write(f"retrieval_trials = {retrieval_trials}\n")
-        f.write(f"seed             = {seed}\n")
-        f.write(f"base_abtt_remove = {base_abtt_remove}\n\n")
+        f.write(f"projection_mode                 = {projection_mode}\n")
+        f.write(f"retrieval_K                    = {retrieval_K}\n")
+        f.write(f"retrieval_trials               = {retrieval_trials}\n")
+        f.write(f"distance_require_different_langs = {distance_require_different_langs}\n")
+        f.write(f"distance_return_group_summaries  = {distance_return_group_summaries}\n")
+        f.write(f"seed                           = {seed}\n")
+        f.write(f"base_abtt_remove               = {base_abtt_remove}\n\n")
 
         f.write("=== CKA (between projection matrices V) ===\n")
         f.write(cka_text + "\n\n")
@@ -309,5 +375,26 @@ def run_full_eval(
                 + ", ".join(f"{k}:{v:.4f}" for k, v in r.recall_at_k.items())
                 + "\n"
             )
+
+        f.write("\n=== DISTANCE RESULTS ===\n")
+        for name in sorted(distance_results.keys()):
+            r = distance_results[name]
+            f.write(f"\n[{name}]\n")
+            f.write(f"Avg cosine similarity: {r.avg_cosine_similarity:.6f}\n")
+            f.write(f"Avg cosine distance:   {r.avg_cosine_distance:.6f}\n")
+            f.write(f"Std cosine distance:   {r.std_cosine_distance:.6f}\n")
+            f.write(f"Min cosine distance:   {r.min_cosine_distance:.6f}\n")
+            f.write(f"Max cosine distance:   {r.max_cosine_distance:.6f}\n")
+            f.write(f"Groups used:           {r.n_groups}\n")
+            f.write(f"Pairs used:            {r.n_pairs}\n")
+
+            if r.group_summaries is not None:
+                f.write("Group summaries:\n")
+                for gs in r.group_summaries:
+                    f.write(
+                        f"  group={gs.group_id} n_sentences={gs.n_sentences} "
+                        f"n_pairs={gs.n_pairs} avg_sim={gs.avg_cosine_similarity:.6f} "
+                        f"avg_dist={gs.avg_cosine_distance:.6f}\n"
+                    )
 
     return out_path

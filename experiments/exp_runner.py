@@ -18,8 +18,8 @@ from models.dvcca import run_dvcca_training_example
 
 
 from eval.process_tatoeba import extract_parallel_maxcover, map_lang
-from eval.eval_runner import run_full_eval
-from eval.embedder import OllamaEmbedder, DiskEmbeddingCache, CachedEmbedder
+from main_experiment.eval.eval_runner import run_full_eval
+from eval.embedder import HFEmbedder, DiskEmbeddingCache, CachedEmbedder
 from .utils import remove_nones_parallel, torch_embedder_to_numpy
 
 # -----------------------------
@@ -179,8 +179,8 @@ def run_experiment(
 
     # ---- Embedder with cache ----
     print("--------Eval Data Embedding--------")
-    embed_base = OllamaEmbedder(model="llama3.1:8b")
-    cache_dir = os.path.abspath("./emb_cache_llama8b")
+    embed_base = HFEmbedder(model_name=MODEL_NAME)
+    cache_dir = os.path.abspath("./emb_cache")
     cache = DiskEmbeddingCache(cache_dir)
     embed_src = CachedEmbedder(embed_base, cache)
     embed_fn = torch_embedder_to_numpy(embed_src)
