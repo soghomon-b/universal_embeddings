@@ -204,7 +204,7 @@ class CachedEmbedder:
 # ============================================================
 # 2) Local HF embedder (replaces OllamaEmbedder)
 # ============================================================
-
+from transformers import AutoTokenizer, AutoModel
 class HFEmbedder:
     """
     Simple Hugging Face embedder using mean pooling over the last hidden state.
