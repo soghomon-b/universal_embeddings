@@ -18,7 +18,7 @@ from models.dvcca import run_dvcca_training_example
 
 
 from eval.process_tatoeba import extract_parallel_maxcover, map_lang
-from main_experiment.eval.eval_runner import run_full_eval
+from eval.eval_runner import run_full_eval
 from eval.embedder import HFEmbedder, DiskEmbeddingCache, CachedEmbedder
 from .utils import remove_nones_parallel, torch_embedder_to_numpy
 
@@ -39,6 +39,7 @@ def run_experiment(
     print(f"----------------Running Experiment #{exp_number}----------------")
     DATA_DIR = "data/merged.tsv"
     MODEL_NAME = "BAAI/bge-m3"
+    CACHE_DIR = os.path.abspath("./model_cache")
     DEVICE_STR = "cuda" if torch.cuda.is_available() else "cpu"
 
     EVAL_SENTENCES_DIR = "data/eval/sentences.csv"
@@ -54,9 +55,9 @@ def run_experiment(
     print(f"--------{exp_number}--------Training-------{exp_number}---------")
     
     print("--------Base--------")
-    base = run_base_retrieval_example(DATA_DIR, seed=seed,pair_subset_size=int(data_size/epochs))
+    base = run_base_retrieval_example(DATA_DIR, seed=seed,pair_subset_size=int(data_size/epochs), ollama_model=MODEL_NAME, cache_dir=CACHE_DIR)
     print("--------Base+ABBT+z--------")
-    base_abttz = run_base_retrieval_example(DATA_DIR, seed=seed,pair_subset_size=int(data_size/epochs), do_abtt=True)
+    base_abttz = run_base_retrieval_example(DATA_DIR, seed=seed,pair_subset_size=int(data_size/epochs), do_abtt=True, ollama_model=MODEL_NAME, cache_dir=CACHE_DIR)
     print("--------Geometric--------")
     geometric = run_geometric_training_example(
         tsv_path=DATA_DIR,
@@ -76,7 +77,7 @@ def run_experiment(
     print("--------Inforce--------")
     inforce = run_inforce_training_example(DATA_DIR, seed, data_size, D, K_grad, epochs, BATCH, DEVICE_STR, ollama_model=MODEL_NAME)
     print("--------pairwise--------")
-    pairwise = run_pairwise_training_example(DATA_DIR, seed, data_size, D, K_grad, epochs, BATCH, DEVICE_STR, ollama_model=MODEL_NAME)
+    pairwise = run_pairwise_training_example(DATA_DIR, seed, data_size, D, K_grad, epochs, BATCH, DEVICE_STR, ollama_model=MODEL_NAME, cache_dir=CACHE_DIR)
 
 
     print("--------supcon--------")
@@ -91,27 +92,29 @@ def run_experiment(
         lr=lr,
         tau=tau,
         device=DEVICE_STR,
-        ollama_model=MODEL_NAME
+        ollama_model=MODEL_NAME,
+        cache_dir=CACHE_DIR
     )
 
     print("--------ols--------")
-    ols = run_ols_training_example(DATA_DIR, seed, ollama_model=MODEL_NAME)
+    ols = run_ols_training_example(DATA_DIR, seed, ollama_model=MODEL_NAME, cache_dir=CACHE_DIR)
 
     print("--------gcca--------")
-    gcca = run_gcca_training_example(DATA_DIR, seed, ollama_model=MODEL_NAME)
+    gcca = run_gcca_training_example(DATA_DIR, seed, ollama_model=MODEL_NAME, cache_dir=CACHE_DIR)
 
 
-    vecMap = run_vecmap_training_example(DATA_DIR, seed, ollama_model=MODEL_NAME)
+    vecMap = run_vecmap_training_example(DATA_DIR, seed, ollama_model=MODEL_NAME, cache_dir=CACHE_DIR)
 
-    muse = run_bitext_training_example(DATA_DIR, seed, model_name=MODEL_NAME)
+    muse = run_bitext_training_example(DATA_DIR, seed, model_name=MODEL_NAME, cache_dir=CACHE_DIR)
 
     ot = SinkhornOT(
         reg=0.1,
         metric="cosine",
         normalize_inputs=True,
+        cache_dir=CACHE_DIR
     )
 
-    dvcca = run_dvcca_training_example(DATA_DIR, seed, model_name=MODEL_NAME)
+    dvcca = run_dvcca_training_example(DATA_DIR, seed, model_name=MODEL_NAME, cache_dir=CACHE_DIR)
 
 
     # ---- V extraction ----
