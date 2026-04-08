@@ -68,7 +68,9 @@ def run_experiment(
         r=r,
         n_min=n_min,
         n_max=n_max,
-        NUM_RUNS=epochs,
+        NUM_RUNS=epochs, 
+        ollama_model=MODEL_NAME,
+        cache_dir=CACHE_DIR
     )
 
     # Determine D and K_grad from geometric output
