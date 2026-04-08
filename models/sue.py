@@ -143,19 +143,11 @@ class SUE(nn.Module):
         self.src_model.fit(X.float())
         self.tgt_model.fit(Y.float())
 
-    def _spectral_transform_src(
-        self,
-        X: torch.Tensor,
-    ) -> np.ndarray:
-        self.src_model.transform(X.float())
-        return self.src_model.embeddings_
+    def _spectral_transform_src(self, X: torch.Tensor) -> np.ndarray:
+        return np.asarray(self.src_model.embeddings_)
 
-    def _spectral_transform_tgt(
-        self,
-        Y: torch.Tensor,
-    ) -> np.ndarray:
-        self.tgt_model.transform(Y.float())
-        return self.tgt_model.embeddings_
+    def _spectral_transform_tgt(self, Y: torch.Tensor) -> np.ndarray:
+        return np.asarray(self.tgt_model.embeddings_)
 
     def _fit_cca(
         self,
