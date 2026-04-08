@@ -69,7 +69,7 @@ def run_ols_training_example(
     subset_size: int = 50000,
     d: int = 768,
     k: int = 256,
-    batches=256,
+    batches=16,
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
     ollama_model : str = "None", 
     cache_dir : str = "./ols_cache",
@@ -86,7 +86,7 @@ def run_ols_training_example(
     train_loader, val_loader, test_loader = prepare_parallel_data(
         tsv_path,
         cfg,
-        batch_size_pairs=256,
+        batch_size_pairs=16,
         num_workers=0,
         pin_memory=(device.startswith("cuda")),
     )

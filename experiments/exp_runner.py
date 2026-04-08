@@ -104,11 +104,13 @@ def run_experiment(
     print("--------gcca--------")
     gcca = run_gcca_training_example(DATA_DIR, seed, ollama_model=MODEL_NAME, cache_dir=CACHE_DIR)
 
-
+    print("--------vecMap--------")
     vecMap = run_vecmap_training_example(DATA_DIR, seed, ollama_model=MODEL_NAME, cache_dir=CACHE_DIR)
 
+    print("--------muse--------")
     muse = run_bitext_training_example(DATA_DIR, seed, model_name=MODEL_NAME, cache_dir=CACHE_DIR)
 
+    print("--------sinkhorn--------")
     ot = SinkhornOT(
         reg=0.1,
         metric="cosine",
@@ -116,6 +118,7 @@ def run_experiment(
         cache_dir=CACHE_DIR
     )
 
+    print("--------dvcca--------")
     dvcca = run_dvcca_training_example(DATA_DIR, seed, model_name=MODEL_NAME, cache_dir=CACHE_DIR)
 
 
