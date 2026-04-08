@@ -169,6 +169,9 @@ class DiskEmbeddingCache:
         with open(path, "w", encoding="utf-8") as f:
             json.dump(np.asarray(vec).tolist(), f)
 
+    def put(self, text: str, vec):
+        self.set(text, vec)
+
 class CachedEmbedder:
     def __init__(self, base, cache):
         self.base = base
