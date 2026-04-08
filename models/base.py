@@ -137,7 +137,7 @@ def deterministic_dedup_pairs(
 
 
 # ============================================================
-# 2) Ollama embeddings with disk cache
+# 2) HuggingFace embeddings with disk cache
 # ============================================================
 
 class DiskEmbeddingCache:
@@ -146,56 +146,130 @@ class DiskEmbeddingCache:
         os.makedirs(cache_dir, exist_ok=True)
 
     def _key(self, text: str) -> str:
+        if not isinstance(text, str):
+            raise TypeError(f"Expected str, got {type(text)}")
         return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
     def _path(self, text: str) -> str:
         return os.path.join(self.cache_dir, self._key(text) + ".json")
 
-    def get(self, text: str) -> Optional[torch.Tensor]:
+    def get(self, text: str):
         path = self._path(text)
         if not os.path.exists(path):
             return None
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                vec = json.load(f)
-        except (JSONDecodeError, OSError):
-            try:
-                os.remove(path)
-            except OSError:
-                pass
-            return None
-        return torch.tensor(vec, dtype=torch.float32)
+        with open(path, "r", encoding="utf-8") as f:
+            return np.array(json.load(f), dtype=np.float32)
 
-    def put(self, text: str, emb: torch.Tensor):
+    def set(self, text: str, vec):
         path = self._path(text)
-        if os.path.exists(path):
-            return
         with open(path, "w", encoding="utf-8") as f:
-            json.dump(emb.detach().cpu().tolist(), f)
+            json.dump(np.asarray(vec).tolist(), f)
+
+class CachedEmbedder:
+    def __init__(self, base, cache):
+        self.base = base
+        self.cache = cache
+
+    def __call__(self, texts):
+        single_input = False
+        if isinstance(texts, str):
+            texts = [texts]
+            single_input = True
+
+        results = [None] * len(texts)
+        missing_idx = []
+        missing_texts = []
+
+        for i, text in enumerate(texts):
+            v = self.cache.get(text)
+            if v is not None:
+                results[i] = v
+            else:
+                missing_idx.append(i)
+                missing_texts.append(text)
+
+        if missing_texts:
+            new_vecs = self.base(missing_texts)
+
+            for i, text, vec in zip(missing_idx, missing_texts, new_vecs):
+                self.cache.set(text, vec)
+                results[i] = vec
+
+        if single_input:
+            return results[0]
+
+        return np.stack(results, axis=0)
 
 
-class OllamaEmbedder:
-    def __init__(self, model: str, host: str = "http://localhost:11434", timeout: int = 120):
-        self.model = model
-        self.url = host.rstrip("/") + "/api/embeddings"
-        self.timeout = timeout
-        self._dim: Optional[int] = None
+# ============================================================
+# 2) Local HF embedder (replaces OllamaEmbedder)
+# ============================================================
 
+class HFEmbedder:
+    """
+    Simple Hugging Face embedder using mean pooling over the last hidden state.
+    Works on Narval without Ollama.
+    """
+
+    def __init__(
+        self,
+        model_name: str,
+        device: torch.device,
+        max_length: int = 512,
+        normalize: bool = True,
+    ):
+        self.model_name = model_name
+        self.device = device
+        self.max_length = max_length
+        self.normalize = normalize
+
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.model = AutoModel.from_pretrained(model_name).to(device)
+        self.model.eval()
+
+        self._dim = self.model.config.hidden_size
+
+    @staticmethod
+    def _mean_pool(last_hidden_state: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
+        mask = attention_mask.unsqueeze(-1).expand(last_hidden_state.size()).float()
+        masked = last_hidden_state * mask
+        summed = masked.sum(dim=1)
+        counts = mask.sum(dim=1).clamp(min=1e-9)
+        return summed / counts
+
+    @torch.no_grad()
+    def embed_batch(self, texts: Sequence[str]) -> torch.Tensor:
+        batch = self.tokenizer(
+            list(texts),
+            padding=True,
+            truncation=True,
+            max_length=self.max_length,
+            return_tensors="pt",
+        )
+
+        batch = {k: v.to(self.device) for k, v in batch.items()}
+        outputs = self.model(**batch)
+
+        emb = self._mean_pool(outputs.last_hidden_state, batch["attention_mask"])
+
+        if self.normalize:
+            emb = F.normalize(emb, p=2, dim=1)
+
+        return emb
+
+    @torch.no_grad()
     def embed_one(self, text: str) -> torch.Tensor:
-        r = requests.post(self.url, json={"model": self.model, "prompt": text}, timeout=self.timeout)
-        r.raise_for_status()
-        data = r.json()
-        vec = data.get("embedding", None)
-        if vec is None:
-            raise RuntimeError(f"No 'embedding' in response: {data}")
-        if self._dim is None:
-            self._dim = len(vec)
-        return torch.tensor(vec, dtype=torch.float32)
+        return self.embed_batch([text])[0].detach().cpu()
+
+    @property
+    def dim(self) -> int:
+        return self._dim
+
 
 
 def embed_texts_cached(
     texts: Sequence[str],
-    embedder: OllamaEmbedder,
+    embedder: HFEmbedder,
     cache: DiskEmbeddingCache,
     device: torch.device,
     embed_batch_size: int = 64,
@@ -346,7 +420,7 @@ def run_base_retrieval_example(
     tgt_sents = [p[3] for p in pairs]
 
     # ---- embed with cache ----
-    embedder = OllamaEmbedder(model=ollama_model)
+    embedder = HFEmbedder(model=ollama_model)
     cache = DiskEmbeddingCache(cache_dir)
 
     print("[info] Embedding source sentences...")
