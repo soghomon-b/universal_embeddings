@@ -273,7 +273,6 @@ class HFEmbedder:
         return self._dim
 
 
-
 def embed_texts_cached(
     texts: Sequence[str],
     embedder: HFEmbedder,
@@ -294,19 +293,22 @@ def embed_texts_cached(
             missing.append(s)
             missing_idx.append(i)
         else:
-            out[i] = v
+            out[i] = torch.tensor(v, dtype=torch.float32)
 
     if missing:
         for j in range(0, len(missing), embed_batch_size):
             chunk = missing[j : j + embed_batch_size]
-            chunk_vecs = [embedder.embed_one(s) for s in chunk]
-            for s, v in zip(chunk, chunk_vecs):
-                cache.put(s, v)
-            for local_k, v in enumerate(chunk_vecs):
+            chunk_vecs = embedder.embed_batch(chunk).detach().cpu()
+
+            for local_k, (s, v) in enumerate(zip(chunk, chunk_vecs)):
+                cache.set(s, v.numpy())
                 out_idx = missing_idx[j + local_k]
                 out[out_idx] = v
 
-    E = torch.stack([v for v in out if v is not None], dim=0).to(device)
+    if any(v is None for v in out):
+        raise RuntimeError("Some embeddings were not filled in embed_texts_cached.")
+
+    E = torch.stack(out, dim=0).to(device)
     return E
 
 
