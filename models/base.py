@@ -30,6 +30,10 @@ import numpy as np
 import requests
 import torch
 
+import torch
+import torch.nn.functional as F
+from transformers import AutoModel, AutoTokenizer
+
 
 # ============================================================
 # 0) Seed helpers
