@@ -39,14 +39,26 @@ class BitextSentenceEncoder(nn.Module):
         self,
         model_name: str = "xlm-roberta-base",
         max_length: int = 100,
+        cache_dir: str = "./bitext_cache",
     ):
         super().__init__()
 
         self.model_name = model_name
         self.max_length = max_length
+        self.cache_dir = cache_dir
 
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-        self.encoder = AutoModel.from_pretrained(model_name)
+        self.tokenizer = AutoTokenizer.from_pretrained(
+        model_name,
+        use_fast=True,
+        cache_dir=cache_dir,
+    )
+
+        self.encoder = AutoModel.from_pretrained(
+            model_name,
+            cache_dir=cache_dir,  
+        )
+
+        self.pooler = MeanPooler()
         self.pooler = MeanPooler()
 
     def tokenize(self, texts):
@@ -164,10 +176,13 @@ def train_bitext_encoder(
     epochs: int = 1,
     temperature: float = 0.05,
     device: str = "cpu",
+    cache_dir: str = "./bitext_cache",
+
 ):
     model = BitextSentenceEncoder(
         model_name=model_name,
         max_length=max_length,
+        cache_dir=cache_dir,
     ).to(device)
 
     optimizer = torch.optim.AdamW(
@@ -292,6 +307,7 @@ def run_bitext_training_example(
     epochs: int = 1,
     temperature: float = 0.05,
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
+    cache_dir : str = "./bitext_cache",
 ):
     cfg = SplitConfig(
         subset_size=subset_size,
@@ -319,6 +335,7 @@ def run_bitext_training_example(
         epochs=epochs,
         temperature=temperature,
         device=device,
+        cache_dir=cache_dir
     )
 
     return model

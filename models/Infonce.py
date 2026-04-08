@@ -55,7 +55,8 @@ def run_inforce_training_example(
     epochs=5,
     batches=256,
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
-    ollama_model : str = "none"
+    ollama_model : str = "none", 
+    cache_dir : str = "./inforce_cache",
 ):
     cfg = SplitConfig(
         subset_size=subset_size,
@@ -78,7 +79,7 @@ def run_inforce_training_example(
             model_name=ollama_model,
             device=device,
     )
-    cache = DiskEmbeddingCache("./emb_cache_llama8b")
+    cache = DiskEmbeddingCache(cache_dir)
     embed_src = CachedEmbedder(embed_base, cache)
     embed_tgt = embed_src  # same cache/model
 

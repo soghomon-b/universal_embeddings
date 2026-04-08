@@ -401,7 +401,8 @@ def run_supcon_training_example(
     lr: float = 1e-3,
     tau: float = 0.07,
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
-    ollama_model : str = "None"
+    ollama_model : str = "None",
+    cache_dir : str = "./supcon_cache"
 ):
     cfg = SplitConfig(
         subset_size=subset_size,
@@ -420,7 +421,7 @@ def run_supcon_training_example(
 
     # Ollama embedder + cache (same model for src & tgt)
     embed_base = HFEmbedder(model_name=ollama_model, device=device)
-    cache = DiskEmbeddingCache("./emb_cache_llama8b")
+    cache = DiskEmbeddingCache(cache_dir)
     embed_src = CachedEmbedder(embed_base, cache)
     embed_tgt = embed_src
 

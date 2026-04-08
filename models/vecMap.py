@@ -531,8 +531,8 @@ def run_vecmap_training_example(
     max_pairs_per_iter: Optional[int] = 20000,
     use_dummy_embedder: bool = False,
     ollama_model: str = "llama3.1:8b",
-    cache_dir: str = "./emb_cache_llama8b",
-    device: str = "cuda" if torch.cuda.is_available() else "cpu",
+    device: str = "cuda" if torch.cuda.is_available() else "cpu", 
+    cache_dir: str = "./vecmap_cache",
 ):
     cfg = SplitConfig(
         subset_size=subset_size,

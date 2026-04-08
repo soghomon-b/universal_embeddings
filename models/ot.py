@@ -182,6 +182,7 @@ def run_sinkhorn_ot_example(
     metric: str = "cosine",
     normalize_inputs: bool = True,
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
+    cache_dir : str = "./ot_cache",
 ):
     cfg = SplitConfig(
         subset_size=subset_size,

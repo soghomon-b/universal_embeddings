@@ -71,7 +71,8 @@ def run_ols_training_example(
     k: int = 256,
     batches=256,
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
-    ollama_model : str = "None"
+    ollama_model : str = "None", 
+    cache_dir : str = "./ols_cache",
 ):
 
     cfg = SplitConfig(
@@ -94,7 +95,7 @@ def run_ols_training_example(
             model_name=ollama_model,
             device=device,
         )
-    cache = DiskEmbeddingCache("./emb_cache_llama8b")
+    cache = DiskEmbeddingCache(cache_dir)
     embed_src = CachedEmbedder(embed_base, cache)
     embed_tgt = embed_src
 
