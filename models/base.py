@@ -420,7 +420,7 @@ def run_base_retrieval_example(
     tgt_sents = [p[3] for p in pairs]
 
     # ---- embed with cache ----
-    embedder = HFEmbedder(model=ollama_model)
+    embedder = HFEmbedder(model_name=ollama_model)
     cache = DiskEmbeddingCache(cache_dir)
 
     print("[info] Embedding source sentences...")
