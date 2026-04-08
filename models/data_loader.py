@@ -352,7 +352,7 @@ class CachedEmbedder:
                 missing_texts.append(text)
 
         if missing_texts:
-            new_vecs = self.base(missing_texts)
+            new_vecs = self.base.embed_batch(missing_texts).detach().cpu().numpy()
 
             for i, text, vec in zip(missing_idx, missing_texts, new_vecs):
                 self.cache.set(text, vec)
@@ -427,6 +427,18 @@ class HFEmbedder:
     @property
     def dim(self) -> int:
         return self._dim
+    
+    def __call__(self, texts):
+        single_input = False
+        if isinstance(texts, str):
+            texts = [texts]
+            single_input = True
+
+        out = self.embed_batch(texts).detach().cpu().numpy()
+
+        if single_input:
+            return out[0]
+        return out
 
 
 # ============================================================
