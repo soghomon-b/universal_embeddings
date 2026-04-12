@@ -20,7 +20,7 @@ from models.dvcca import run_dvcca_training_example
 from eval.process_tatoeba import extract_parallel_maxcover, map_lang
 from eval.eval_runner import run_full_eval
 from eval.embedder import HFEmbedder, DiskEmbeddingCache, CachedEmbedder
-from .utils import remove_nones_parallel, torch_embedder_to_numpy
+from .utils import remove_nones_parallel, torch_embedder_to_numpy, clean_parallel_lang_sentence
 
 # -----------------------------
 # Experiment runner
@@ -184,6 +184,8 @@ def run_experiment(
     )
     retrieval_groups = remove_nones_parallel(retrieval_groups)
 
+    retreival_groups_2 = clean_parallel_lang_sentence(retreival_groups_2)
+
     # ---- Embedder with cache ----
     print("--------Eval Data Embedding--------")
     embed_base = HFEmbedder(model_name=MODEL_NAME)
@@ -201,7 +203,7 @@ def run_experiment(
         projection_mode="subspace_coords",
         retrieval_groups=retrieval_groups,
         retrieval_langs=None,  # only correct if retrieval_groups are (lang,sent) tuples
-        retrieval_groups_2=None,
+        retrieval_groups_2=retreival_groups_2,
         retrieval_K=10,
         retrieval_trials=500,
         seed=seed,
