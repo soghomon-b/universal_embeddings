@@ -737,7 +737,7 @@ def run_gcca_training_example(
     epochs: int = 10,
     batch_size_pairs: int = 256,
     embed_batch_size: int = 64,
-    model_name: str = "sentence-transformers/all-mpnet-base-v2",
+    ollama_model: str = "sentence-transformers/all-mpnet-base-v2",
     cache_dir: str = "./emb_cache",
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
 ):
@@ -759,7 +759,7 @@ def run_gcca_training_example(
     del val_loader, test_loader
 
     base = HFEmbedder(
-        model_name=model_name,
+        model_name=ollama_model,
         device=device,
         max_length=512,
         normalize=True,
