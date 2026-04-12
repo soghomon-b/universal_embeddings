@@ -201,6 +201,7 @@ def run_experiment(
         projection_mode="subspace_coords",
         retrieval_groups=retrieval_groups,
         retrieval_langs=None,  # only correct if retrieval_groups are (lang,sent) tuples
+        retrieval_groups_2=None,
         retrieval_K=10,
         retrieval_trials=500,
         seed=seed,
