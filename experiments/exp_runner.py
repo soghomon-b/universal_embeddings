@@ -118,7 +118,7 @@ def run_experiment(
     )
 
     print("--------dvcca--------")
-    dvcca = run_dvcca_training_example(DATA_DIR, seed, model_name=MODEL_NAME, cache_dir=CACHE_DIR)
+    dvcca = run_dvcca_training_example(DATA_DIR, seed, model_name=MODEL_NAME)
 
 
     # ---- V extraction ----
