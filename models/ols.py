@@ -37,25 +37,45 @@ class OLS(nn.Module):
         # load into linear layer
         self.proj.weight.copy_(W.T)
 
-def train_ols(data_loader, d, k, device="cpu"):
-    model = OLS(d, k).to(device)
-
-    XtX = torch.zeros(d, d, dtype=torch.float32, device="cpu")
-    XtY = torch.zeros(d, k, dtype=torch.float32, device="cpu")
+def train_ols(data_loader, k, device="cpu", ridge=1e-4):
+    first_batch = True
+    XtX = None
+    XtY = None
+    inferred_d = None
 
     print("collecting sufficient statistics for OLS...")
 
-    for y, e_i, e_j in data_loader:
-        X = e_i.float().cpu()              # [b, d]
-        Y = e_j.float().cpu()              # [b, d] or [b, k]
+    for _, e_i, e_j in data_loader:
+        X = e_i.float().cpu()   # [b, d]
+        Y = e_j.float().cpu()   # [b, d_y]
 
-        if Y.shape[1] != k:
-            Y = Y[:, :k]
+        if first_batch:
+            inferred_d = X.shape[1]
+
+            if Y.shape[1] != k:
+                Y = Y[:, :k]
+
+            XtX = torch.zeros(inferred_d, inferred_d, dtype=torch.float32)
+            XtY = torch.zeros(inferred_d, k, dtype=torch.float32)
+            first_batch = False
+        else:
+            if Y.shape[1] != k:
+                Y = Y[:, :k]
+
+        if X.shape[1] != inferred_d:
+            raise ValueError(f"Inconsistent X dim: expected {inferred_d}, got {X.shape[1]}")
 
         XtX += X.T @ X
         XtY += X.T @ Y
 
-    W = torch.linalg.solve(XtX, XtY)      # [d, k]
+    if XtX is None:
+        raise ValueError("No batches were produced by data_loader.")
+
+    model = OLS(inferred_d, k).to(device)
+
+    I = torch.eye(inferred_d, dtype=torch.float32)
+    W = torch.linalg.solve(XtX + ridge * I, XtY)
+
     model.proj.weight.data.copy_(W.T.to(device))
     return model
 
