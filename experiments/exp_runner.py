@@ -114,8 +114,7 @@ def run_experiment(
     ot = SinkhornOT(
         reg=0.1,
         metric="cosine",
-        normalize_inputs=True,
-        cache_dir=CACHE_DIR
+        normalize_inputs=True
     )
 
     print("--------dvcca--------")
