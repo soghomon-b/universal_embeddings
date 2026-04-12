@@ -40,27 +40,23 @@ class OLS(nn.Module):
 def train_ols(data_loader, d, k, device="cpu"):
     model = OLS(d, k).to(device)
 
-    X_all = []
-    Y_all = []
+    XtX = torch.zeros(d, d, dtype=torch.float32, device="cpu")
+    XtY = torch.zeros(d, k, dtype=torch.float32, device="cpu")
 
-    print("collecting embeddings for OLS...")
+    print("collecting sufficient statistics for OLS...")
 
     for y, e_i, e_j in data_loader:
-        e_i = e_i.to(device).float()
-        e_j = e_j.to(device).float()
+        X = e_i.float().cpu()              # [b, d]
+        Y = e_j.float().cpu()              # [b, d] or [b, k]
 
-        X_all.append(e_i)
-        Y_all.append(e_j)
+        if Y.shape[1] != k:
+            Y = Y[:, :k]
 
-    X = torch.cat(X_all, dim=0)  # (n, d)
-    Y = torch.cat(Y_all, dim=0)  # (n, d)
+        XtX += X.T @ X
+        XtY += X.T @ Y
 
-    # If target dim differs
-    if Y.shape[1] != k:
-        Y = Y[:, :k]
-
-    model.fit_ols(X, Y)
-
+    W = torch.linalg.solve(XtX, XtY)      # [d, k]
+    model.proj.weight.data.copy_(W.T.to(device))
     return model
 
 def run_ols_training_example(
