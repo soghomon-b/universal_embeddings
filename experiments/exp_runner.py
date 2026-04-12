@@ -77,7 +77,7 @@ def run_experiment(
     D, K_grad = geometric.shape
 
     print("--------Inforce--------")
-    inforce = run_inforce_training_example(DATA_DIR, seed, data_size, D, K_grad, epochs, BATCH, DEVICE_STR, ollama_model=MODEL_NAME)
+    inforce = run_inforce_training_example(DATA_DIR, seed, data_size, D, K_grad, epochs, BATCH, DEVICE_STR, ollama_model=MODEL_NAME, batches=BATCH, cache_dir=CACHE_DIR)
     print("--------pairwise--------")
     pairwise = run_pairwise_training_example(DATA_DIR, seed, data_size, D, K_grad, epochs, BATCH, DEVICE_STR, ollama_model=MODEL_NAME, cache_dir=CACHE_DIR)
 
@@ -99,16 +99,16 @@ def run_experiment(
     )
 
     print("--------ols--------")
-    ols = run_ols_training_example(DATA_DIR, seed, ollama_model=MODEL_NAME, cache_dir=CACHE_DIR)
+    ols = run_ols_training_example(DATA_DIR, seed, ollama_model=MODEL_NAME, cache_dir=CACHE_DIR, batches=BATCH, k=K_grad)
 
     print("--------gcca--------")
-    gcca = run_gcca_training_example(DATA_DIR, seed, ollama_model=MODEL_NAME, cache_dir=CACHE_DIR)
+    gcca = run_gcca_training_example(DATA_DIR, seed, ollama_model=MODEL_NAME, cache_dir=CACHE_DIR, batch_size_pairs=BATCH, k=K_grad, epochs=epochs)
 
     print("--------vecMap--------")
-    vecMap = run_vecmap_training_example(DATA_DIR, seed, ollama_model=MODEL_NAME, cache_dir=CACHE_DIR)
+    vecMap = run_vecmap_training_example(DATA_DIR, seed, ollama_model=MODEL_NAME, cache_dir=CACHE_DIR, batch_size_pairs=BATCH, subset_size=BATCH,embed_batch_size=BATCH)
 
     print("--------muse--------")
-    muse = run_bitext_training_example(DATA_DIR, seed, model_name=MODEL_NAME, cache_dir=CACHE_DIR)
+    muse = run_bitext_training_example(DATA_DIR, seed, model_name=MODEL_NAME, cache_dir=CACHE_DIR, batch_size_pairs=BATCH, subset_size=BATCH, epochs=epochs)
 
     print("--------sinkhorn--------")
     ot = SinkhornOT(
@@ -118,7 +118,7 @@ def run_experiment(
     )
 
     print("--------dvcca--------")
-    dvcca = run_dvcca_training_example(DATA_DIR, seed, model_name=MODEL_NAME)
+    dvcca = run_dvcca_training_example(DATA_DIR, seed, model_name=MODEL_NAME, subset_size=BATCH, batch_size_pairs=BATCH, epochs=epochs)
 
 
     # ---- V extraction ----
