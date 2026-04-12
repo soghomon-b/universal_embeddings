@@ -280,8 +280,8 @@ def train_bitext_encoder(
 def encode_texts(
     model: BitextSentenceEncoder,
     texts,
-    device: str = "cpu",
-    batch_size: int = 64,
+    device: str = "gpu" if torch.cuda.is_available() else "cpu",
+    batch_size: int = 8,
 ):
     model.eval()
 
@@ -301,7 +301,7 @@ def run_bitext_training_example(
     subset_size: int = 50000,
     model_name: str = "xlm-roberta-base",
     max_length: int = 100,
-    batch_size_pairs: int = 64,
+    batch_size_pairs: int = 8,
     lr: float = 2e-5,
     weight_decay: float = 1e-2,
     epochs: int = 1,
