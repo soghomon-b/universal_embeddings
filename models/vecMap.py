@@ -553,7 +553,7 @@ def run_vecmap_training_example(
     if use_dummy_embedder:
         embed_fn_by_lang = None
     else:
-        base = HFEmbedder(model=ollama_model, device=device)
+        base = HFEmbedder(model_name=ollama_model, device=device)
         cache = DiskEmbeddingCache(cache_dir)
         embed_fn_by_lang = {
             lang: CachedEmbedder(base, cache)
