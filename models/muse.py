@@ -1,4 +1,5 @@
 import math
+from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
@@ -25,12 +26,10 @@ class MeanPooler(nn.Module):
         attention_mask   : (b, t)
         returns          : (b, h)
         """
-
         mask = attention_mask.unsqueeze(-1).to(token_embeddings.dtype)  # (b, t, 1)
         masked = token_embeddings * mask
         summed = masked.sum(dim=1)  # (b, h)
         counts = mask.sum(dim=1).clamp(min=1.0)  # (b, 1)
-
         return summed / counts
 
 
@@ -38,28 +37,41 @@ class BitextSentenceEncoder(nn.Module):
     def __init__(
         self,
         model_name: str = "xlm-roberta-base",
-        max_length: int = 100,
+        max_length: int = 64,
         cache_dir: str = "./bitext_cache",
+        proj_dim: int = 256,
+        freeze_backbone: bool = True,
+        use_gradient_checkpointing: bool = False,
     ):
         super().__init__()
 
         self.model_name = model_name
         self.max_length = max_length
         self.cache_dir = cache_dir
+        self.freeze_backbone = freeze_backbone
 
         self.tokenizer = AutoTokenizer.from_pretrained(
-        model_name,
-        use_fast=True,
-        cache_dir=cache_dir,
-    )
+            model_name,
+            use_fast=True,
+            cache_dir=cache_dir,
+        )
 
         self.encoder = AutoModel.from_pretrained(
             model_name,
-            cache_dir=cache_dir,  
+            cache_dir=cache_dir,
         )
 
+        if use_gradient_checkpointing and not freeze_backbone:
+            # helps if you later decide to unfreeze the backbone
+            self.encoder.gradient_checkpointing_enable()
+
+        hidden_size = self.encoder.config.hidden_size
         self.pooler = MeanPooler()
-        self.pooler = MeanPooler()
+        self.proj = nn.Linear(hidden_size, proj_dim, bias=False)
+
+        if freeze_backbone:
+            for p in self.encoder.parameters():
+                p.requires_grad = False
 
     def tokenize(self, texts):
         return self.tokenizer(
@@ -72,12 +84,19 @@ class BitextSentenceEncoder(nn.Module):
 
     def encode_batch(self, texts, device: str):
         batch = self.tokenize(texts)
-        batch = {k: v.to(device) for k, v in batch.items()}
+        batch = {k: v.to(device, non_blocking=True) for k, v in batch.items()}
 
-        outputs = self.encoder(**batch)
-        hidden = outputs.last_hidden_state  # (b, t, h)
+        # If the backbone is frozen, do not store activations for it.
+        if self.freeze_backbone:
+            with torch.no_grad():
+                outputs = self.encoder(**batch)
+                hidden = outputs.last_hidden_state
+        else:
+            outputs = self.encoder(**batch)
+            hidden = outputs.last_hidden_state
 
         sent = self.pooler(hidden, batch["attention_mask"])  # (b, h)
+        sent = self.proj(sent)  # (b, proj_dim)
         sent = F.normalize(sent, dim=-1)
 
         return sent
@@ -96,12 +115,7 @@ def symmetric_bitext_loss(
     """
     z_src : (b, h), already normalized
     z_tgt : (b, h), already normalized
-
-    We use in-batch negatives:
-      - for each source, all other targets in batch are negatives
-      - for each target, all other sources in batch are negatives
     """
-
     logits = (z_src @ z_tgt.T) / temperature  # (b, b)
     targets = torch.arange(z_src.size(0), device=z_src.device)
 
@@ -109,7 +123,6 @@ def symmetric_bitext_loss(
     loss_tgt_to_src = F.cross_entropy(logits.T, targets)
 
     loss = 0.5 * (loss_src_to_tgt + loss_tgt_to_src)
-
     return loss, logits
 
 
@@ -126,6 +139,7 @@ def evaluate_bitext(
     data_loader,
     device: str = "cpu",
     temperature: float = 0.05,
+    use_amp: bool = True,
 ):
     model.eval()
 
@@ -134,15 +148,18 @@ def evaluate_bitext(
     total_acc_tgt_to_src = 0.0
     total_batches = 0
 
+    amp_enabled = use_amp and device.startswith("cuda")
+
     for batch in data_loader:
         _, _, src_texts, tgt_texts = batch
 
-        z_src, z_tgt = model(src_texts, tgt_texts, device=device)
-        loss, logits = symmetric_bitext_loss(
-            z_src,
-            z_tgt,
-            temperature=temperature,
-        )
+        with torch.amp.autocast(device_type="cuda", enabled=amp_enabled):
+            z_src, z_tgt = model(src_texts, tgt_texts, device=device)
+            loss, logits = symmetric_bitext_loss(
+                z_src,
+                z_tgt,
+                temperature=temperature,
+            )
 
         acc_src_to_tgt = retrieval_accuracy(logits)
         acc_tgt_to_src = retrieval_accuracy(logits.T)
@@ -170,26 +187,41 @@ def train_bitext_encoder(
     train_loader,
     val_loader,
     model_name: str = "xlm-roberta-base",
-    max_length: int = 100,
-    lr: float = 2e-5,
+    max_length: int = 64,
+    proj_dim: int = 256,
+    lr: float = 2e-4,
     weight_decay: float = 1e-2,
     epochs: int = 1,
     temperature: float = 0.05,
     device: str = "cpu",
     cache_dir: str = "./bitext_cache",
-
+    freeze_backbone: bool = True,
+    use_gradient_checkpointing: bool = False,
+    use_amp: bool = True,
+    grad_accum_steps: int = 1,
+    clip_grad_norm: float | None = 1.0,
 ):
     model = BitextSentenceEncoder(
         model_name=model_name,
         max_length=max_length,
         cache_dir=cache_dir,
+        proj_dim=proj_dim,
+        freeze_backbone=freeze_backbone,
+        use_gradient_checkpointing=use_gradient_checkpointing,
     ).to(device)
 
+    trainable_params = [p for p in model.parameters() if p.requires_grad]
+    if not trainable_params:
+        raise ValueError("No trainable parameters found. Check freeze settings.")
+
     optimizer = torch.optim.AdamW(
-        model.parameters(),
+        trainable_params,
         lr=lr,
         weight_decay=weight_decay,
     )
+
+    amp_enabled = use_amp and device.startswith("cuda")
+    scaler = torch.amp.GradScaler("cuda", enabled=amp_enabled)
 
     best_val_loss = float("inf")
     best_state = None
@@ -197,6 +229,10 @@ def train_bitext_encoder(
     print("starting bitext training...")
     print(f"model = {model_name}")
     print(f"device = {device}")
+    print(f"freeze_backbone = {freeze_backbone}")
+    print(f"max_length = {max_length}")
+    print(f"proj_dim = {proj_dim}")
+    print(f"amp_enabled = {amp_enabled}")
 
     for epoch in range(epochs):
         model.train()
@@ -206,19 +242,33 @@ def train_bitext_encoder(
         total_acc_tgt_to_src = 0.0
         total_batches = 0
 
+        optimizer.zero_grad(set_to_none=True)
+
         for batch_idx, batch in enumerate(train_loader):
             _, _, src_texts, tgt_texts = batch
-            optimizer.zero_grad()
 
-            z_src, z_tgt = model(src_texts, tgt_texts, device=device)
-            loss, logits = symmetric_bitext_loss(
-                z_src,
-                z_tgt,
-                temperature=temperature,
-            )
+            with torch.amp.autocast(device_type="cuda", enabled=amp_enabled):
+                z_src, z_tgt = model(src_texts, tgt_texts, device=device)
+                loss, logits = symmetric_bitext_loss(
+                    z_src,
+                    z_tgt,
+                    temperature=temperature,
+                )
 
-            loss.backward()
-            optimizer.step()
+                loss_for_backward = loss / grad_accum_steps
+
+            scaler.scale(loss_for_backward).backward()
+
+            should_step = ((batch_idx + 1) % grad_accum_steps == 0)
+
+            if should_step:
+                if clip_grad_norm is not None:
+                    scaler.unscale_(optimizer)
+                    torch.nn.utils.clip_grad_norm_(trainable_params, clip_grad_norm)
+
+                scaler.step(optimizer)
+                scaler.update()
+                optimizer.zero_grad(set_to_none=True)
 
             acc_src_to_tgt = retrieval_accuracy(logits)
             acc_tgt_to_src = retrieval_accuracy(logits.T)
@@ -236,6 +286,17 @@ def train_bitext_encoder(
                     f"tgt->src acc = {total_acc_tgt_to_src / total_batches:.4f}"
                 )
 
+        # step once more if the epoch ended mid accumulation
+        leftover = total_batches % grad_accum_steps
+        if leftover != 0:
+            if clip_grad_norm is not None:
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(trainable_params, clip_grad_norm)
+
+            scaler.step(optimizer)
+            scaler.update()
+            optimizer.zero_grad(set_to_none=True)
+
         train_metrics = {
             "loss": total_loss / max(total_batches, 1),
             "acc_src_to_tgt": total_acc_src_to_tgt / max(total_batches, 1),
@@ -247,6 +308,7 @@ def train_bitext_encoder(
             val_loader,
             device=device,
             temperature=temperature,
+            use_amp=use_amp,
         )
 
         print(
@@ -268,6 +330,8 @@ def train_bitext_encoder(
                 },
                 "model_name": model_name,
                 "max_length": max_length,
+                "proj_dim": proj_dim,
+                "freeze_backbone": freeze_backbone,
             }
 
     if best_state is not None:
@@ -280,16 +344,21 @@ def train_bitext_encoder(
 def encode_texts(
     model: BitextSentenceEncoder,
     texts,
-    device: str = "gpu" if torch.cuda.is_available() else "cpu",
+    device: str = "cuda" if torch.cuda.is_available() else "cpu",
     batch_size: int = 8,
+    use_amp: bool = True,
 ):
     model.eval()
 
     all_vecs = []
+    amp_enabled = use_amp and device.startswith("cuda")
 
     for i in range(0, len(texts), batch_size):
-        chunk = texts[i : i + batch_size]
-        z = model.encode_batch(chunk, device=device)
+        chunk = texts[i: i + batch_size]
+
+        with torch.amp.autocast(device_type="cuda", enabled=amp_enabled):
+            z = model.encode_batch(chunk, device=device)
+
         all_vecs.append(z.cpu())
 
     return torch.cat(all_vecs, dim=0)
@@ -300,14 +369,19 @@ def run_bitext_training_example(
     seed: int,
     subset_size: int = 50000,
     model_name: str = "xlm-roberta-base",
-    max_length: int = 100,
-    batch_size_pairs: int = 8,
-    lr: float = 2e-5,
+    max_length: int = 64,
+    batch_size_pairs: int = 2,
+    proj_dim: int = 256,
+    lr: float = 2e-4,
     weight_decay: float = 1e-2,
     epochs: int = 1,
     temperature: float = 0.05,
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
-    cache_dir : str = "./bitext_cache",
+    cache_dir: str = "./bitext_cache",
+    freeze_backbone: bool = True,
+    use_gradient_checkpointing: bool = False,
+    use_amp: bool = True,
+    grad_accum_steps: int = 1,
 ):
     cfg = SplitConfig(
         subset_size=subset_size,
@@ -322,7 +396,7 @@ def run_bitext_training_example(
         cfg,
         batch_size_pairs=batch_size_pairs,
         num_workers=0,
-        pin_memory=(device.startswith("cuda")),
+        pin_memory=device.startswith("cuda"),
     )
 
     model = train_bitext_encoder(
@@ -330,12 +404,26 @@ def run_bitext_training_example(
         val_loader=val_loader,
         model_name=model_name,
         max_length=max_length,
+        proj_dim=proj_dim,
         lr=lr,
         weight_decay=weight_decay,
         epochs=epochs,
         temperature=temperature,
         device=device,
-        cache_dir=cache_dir
+        cache_dir=cache_dir,
+        freeze_backbone=freeze_backbone,
+        use_gradient_checkpointing=use_gradient_checkpointing,
+        use_amp=use_amp,
+        grad_accum_steps=grad_accum_steps,
     )
+
+    test_metrics = evaluate_bitext(
+        model,
+        test_loader,
+        device=device,
+        temperature=temperature,
+        use_amp=use_amp,
+    )
+    print(f"test_metrics = {test_metrics}")
 
     return model
