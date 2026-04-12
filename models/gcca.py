@@ -5,13 +5,13 @@ import json
 from json import JSONDecodeError
 from dataclasses import dataclass
 from collections import defaultdict
-from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Callable, Dict, List, Optional, Sequence, Tuple, Union
 
-import requests
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
+from transformers import AutoTokenizer, AutoModel
 
 
 # ============================================================
@@ -33,10 +33,6 @@ class SplitConfig:
 
 
 def parse_parallel_tsv_line(line: str) -> Optional[Tuple[str, str, str, str]]:
-    """
-    Expected format:
-        src_lang \t tgt_lang \t src_sent \t tgt_sent
-    """
     line = line.rstrip("\n")
     if not line:
         return None
@@ -216,40 +212,7 @@ def prepare_parallel_data(
 
 
 # ============================================================
-# 3) Embedding helpers
-# ============================================================
-
-@torch.no_grad()
-def embed_sentences_in_batches(
-    sentences: List[str],
-    embed_fn: Callable[[List[str]], torch.Tensor],
-    batch_size: int,
-    device: str,
-) -> torch.Tensor:
-    embs = []
-    for i in range(0, len(sentences), batch_size):
-        chunk = sentences[i:i + batch_size]
-        e = embed_fn(chunk)
-        if not torch.is_tensor(e):
-            e = torch.tensor(e, dtype=torch.float32)
-        e = e.float().to(device)
-        embs.append(e)
-    return torch.cat(embs, dim=0)
-
-
-import os
-import json
-import hashlib
-from json import JSONDecodeError
-from typing import Optional, Sequence, List
-
-import torch
-import torch.nn.functional as F
-from transformers import AutoTokenizer, AutoModel
-
-
-# ============================================================
-# 1) Disk cache (mostly unchanged)
+# 3) Embedding cache + embedder
 # ============================================================
 
 class DiskEmbeddingCache:
@@ -258,6 +221,8 @@ class DiskEmbeddingCache:
         os.makedirs(cache_dir, exist_ok=True)
 
     def _key(self, text: str) -> str:
+        if not isinstance(text, str):
+            raise TypeError(f"DiskEmbeddingCache expected str, got {type(text)}")
         return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
     def _path(self, text: str) -> str:
@@ -288,37 +253,34 @@ class DiskEmbeddingCache:
             json.dump(emb.detach().cpu().tolist(), f)
 
 
-# ============================================================
-# 2) Local HF embedder (replaces OllamaEmbedder)
-# ============================================================
-
 class HFEmbedder:
     """
-    Simple Hugging Face embedder using mean pooling over the last hidden state.
-    Works on Narval without Ollama.
+    Accepts:
+      - single string -> returns (d,)
+      - list of strings -> returns (B, d)
     """
 
     def __init__(
         self,
         model_name: str,
-        device: torch.device,
+        device: Union[str, torch.device],
         max_length: int = 512,
         normalize: bool = True,
     ):
         self.model_name = model_name
-        self.device = device
+        self.device = torch.device(device)
         self.max_length = max_length
         self.normalize = normalize
 
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = AutoModel.from_pretrained(model_name).to(device)
+        self.model = AutoModel.from_pretrained(model_name).to(self.device)
         self.model.eval()
 
-        self._dim = self.model.config.hidden_size
+        self._dim = int(self.model.config.hidden_size)
 
     @staticmethod
     def _mean_pool(last_hidden_state: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
-        mask = attention_mask.unsqueeze(-1).expand(last_hidden_state.size()).float()
+        mask = attention_mask.unsqueeze(-1).expand_as(last_hidden_state).float()
         masked = last_hidden_state * mask
         summed = masked.sum(dim=1)
         counts = mask.sum(dim=1).clamp(min=1e-9)
@@ -326,14 +288,17 @@ class HFEmbedder:
 
     @torch.no_grad()
     def embed_batch(self, texts: Sequence[str]) -> torch.Tensor:
+        texts = list(texts)
+        if len(texts) == 0:
+            return torch.empty(0, self._dim, dtype=torch.float32)
+
         batch = self.tokenizer(
-            list(texts),
+            texts,
             padding=True,
             truncation=True,
             max_length=self.max_length,
             return_tensors="pt",
         )
-
         batch = {k: v.to(self.device) for k, v in batch.items()}
         outputs = self.model(**batch)
 
@@ -342,83 +307,260 @@ class HFEmbedder:
         if self.normalize:
             emb = F.normalize(emb, p=2, dim=1)
 
-        return emb
+        return emb.detach().cpu()
 
     @torch.no_grad()
     def embed_one(self, text: str) -> torch.Tensor:
-        return self.embed_batch([text])[0].detach().cpu()
+        return self.embed_batch([text])[0]
+
+    @torch.no_grad()
+    def __call__(self, text_or_texts: Union[str, Sequence[str]]) -> torch.Tensor:
+        if isinstance(text_or_texts, str):
+            return self.embed_one(text_or_texts)
+        return self.embed_batch(text_or_texts)
 
     @property
     def dim(self) -> int:
         return self._dim
 
 
-# ============================================================
-# 3) Cached embedding function
-# ============================================================
-
-def embed_sentences_cached(
-    sentences: Sequence[str],
-    embedder: HFEmbedder,
-    cache: DiskEmbeddingCache,
-    device: torch.device,
-    embed_batch_size: int = 64,
-) -> torch.Tensor:
-    """
-    Returns X: (N, d) on device. Uses per-sentence cache.
-    Missing sentences are embedded in GPU batches.
-    """
-    out: List[Optional[torch.Tensor]] = [None] * len(sentences)
-    missing: List[str] = []
-    missing_idx: List[int] = []
-
-    # Cache lookup
-    for i, s in enumerate(sentences):
-        v = cache.get(s)
-        if v is None:
-            missing.append(s)
-            missing_idx.append(i)
-        else:
-            out[i] = v
-
-    # Embed missing in batches
-    if missing:
-        for j in range(0, len(missing), embed_batch_size):
-            chunk = missing[j : j + embed_batch_size]
-
-            chunk_vecs = embedder.embed_batch(chunk).detach().cpu()
-
-            for s, v in zip(chunk, chunk_vecs):
-                cache.put(s, v)
-
-            for local_k, v in enumerate(chunk_vecs):
-                out_idx = missing_idx[j + local_k]
-                out[out_idx] = v
-
-    X = torch.stack([v for v in out if v is not None], dim=0).to(device)
-    return X
-
 class CachedEmbedder:
-    def __init__(self, base, cache: DiskEmbeddingCache):
+    """
+    Supports:
+      - str -> (d,)
+      - list[str] -> (B, d)
+    """
+
+    def __init__(self, base: HFEmbedder, cache: DiskEmbeddingCache):
         self.base = base
         self.cache = cache
 
-    def __call__(self, text: str) -> torch.Tensor:
-        v = self.cache.get(text)
-        if v is not None:
+    def __call__(self, text_or_texts: Union[str, Sequence[str]]) -> torch.Tensor:
+        if isinstance(text_or_texts, str):
+            v = self.cache.get(text_or_texts)
+            if v is not None:
+                return v
+            v = self.base(text_or_texts)
+            self.cache.put(text_or_texts, v)
             return v
 
-        v = self.base.embed_one(text)
-        self.cache.put(text, v)
-        return v
+        texts = list(text_or_texts)
+        if len(texts) == 0:
+            return torch.empty(0, self.base.dim, dtype=torch.float32)
+
+        out: List[Optional[torch.Tensor]] = [None] * len(texts)
+        missing_texts: List[str] = []
+        missing_idx: List[int] = []
+
+        for i, t in enumerate(texts):
+            if not isinstance(t, str):
+                raise TypeError(f"Expected str in batch, got {type(t)} at index {i}")
+            v = self.cache.get(t)
+            if v is None:
+                missing_texts.append(t)
+                missing_idx.append(i)
+            else:
+                out[i] = v
+
+        if missing_texts:
+            new_vecs = self.base(missing_texts)
+            if new_vecs.ndim != 2:
+                raise ValueError(f"Expected shape (B, d), got {tuple(new_vecs.shape)}")
+            if new_vecs.shape[0] != len(missing_texts):
+                raise ValueError(
+                    f"Embedder returned {new_vecs.shape[0]} vectors for "
+                    f"{len(missing_texts)} inputs"
+                )
+
+            for idx, text, vec in zip(missing_idx, missing_texts, new_vecs):
+                self.cache.put(text, vec)
+                out[idx] = vec
+
+        return torch.stack(out, dim=0)
+
+
+@torch.no_grad()
+def embed_sentences_in_batches(
+    sentences: List[str],
+    embed_fn: Callable[[Sequence[str]], torch.Tensor],
+    batch_size: int,
+    device: str,
+) -> torch.Tensor:
+    if len(sentences) == 0:
+        raise ValueError("embed_sentences_in_batches got an empty sentence list")
+
+    embs = []
+    for i in range(0, len(sentences), batch_size):
+        chunk = sentences[i:i + batch_size]
+        e = embed_fn(chunk)
+
+        if not torch.is_tensor(e):
+            e = torch.tensor(e, dtype=torch.float32)
+
+        if e.ndim == 1:
+            e = e.unsqueeze(0)
+
+        e = e.float().to(device)
+        embs.append(e)
+
+    return torch.cat(embs, dim=0)
+
+
+def make_pairwise_batches_from_loader(
+    loader: DataLoader,
+    embed_src: Callable[[Sequence[str]], torch.Tensor],
+    embed_tgt: Callable[[Sequence[str]], torch.Tensor],
+    device: str = "cpu",
+    embed_batch_size: int = 64,
+    neg_ratio: float = 1.0,
+):
+    """
+    Yields tuples compatible with your OLS / contrastive-style code:
+        (_, e_i, e_j)
+
+    neg_ratio kept for API compatibility, but unused here.
+    """
+    del neg_ratio
+
+    for _, _, s1, s2 in loader:
+        e_i = embed_sentences_in_batches(s1, embed_src, embed_batch_size, device)
+        e_j = embed_sentences_in_batches(s2, embed_tgt, embed_batch_size, device)
+        yield None, e_i, e_j
+
+
 # ============================================================
-# 4) Multilingual masked GCCA
+# 4) OLS
+# ============================================================
+
+class OLS(nn.Module):
+    def __init__(self, d: int, k: int):
+        super().__init__()
+        self.proj = nn.Linear(d, k, bias=False)
+
+    def forward(self, e: torch.Tensor) -> torch.Tensor:
+        z = self.proj(e)
+        return F.normalize(z, dim=-1)
+
+    @torch.no_grad()
+    def fit_from_stats(self, XtX: torch.Tensor, XtY: torch.Tensor, ridge: float = 1e-4):
+        d = XtX.shape[0]
+        I = torch.eye(d, dtype=XtX.dtype, device=XtX.device)
+        W = torch.linalg.solve(XtX + ridge * I, XtY)
+        self.proj.weight.copy_(W.T)
+
+
+def train_ols(
+    data_loader,
+    k: int,
+    device: str = "cpu",
+    ridge: float = 1e-4,
+) -> OLS:
+    XtX = None
+    XtY = None
+    inferred_d = None
+
+    print("collecting sufficient statistics for OLS...")
+
+    for _, e_i, e_j in data_loader:
+        X = e_i.float().cpu()
+        Y = e_j.float().cpu()
+
+        if X.ndim != 2 or Y.ndim != 2:
+            raise ValueError(f"Expected 2D tensors, got X={tuple(X.shape)}, Y={tuple(Y.shape)}")
+
+        if X.shape[0] != Y.shape[0]:
+            raise ValueError(f"Mismatched batch rows: X={tuple(X.shape)}, Y={tuple(Y.shape)}")
+
+        if inferred_d is None:
+            inferred_d = X.shape[1]
+            XtX = torch.zeros(inferred_d, inferred_d, dtype=torch.float32)
+            XtY = torch.zeros(inferred_d, k, dtype=torch.float32)
+            print(f"[OLS] inferred input dim={inferred_d}, target dim={Y.shape[1]}, proj dim={k}")
+
+        if X.shape[1] != inferred_d:
+            raise ValueError(f"Inconsistent X dim: expected {inferred_d}, got {X.shape[1]}")
+
+        if Y.shape[1] < k:
+            raise ValueError(f"Target dim {Y.shape[1]} is smaller than k={k}")
+
+        Yk = Y[:, :k]
+
+        XtX += X.T @ X
+        XtY += X.T @ Yk
+
+    if XtX is None or XtY is None:
+        raise ValueError("No batches were produced by the OLS loader.")
+
+    model = OLS(inferred_d, k).to(device)
+    model.fit_from_stats(XtX, XtY, ridge=ridge)
+    model.proj.weight.data.copy_(model.proj.weight.data.to(device))
+    return model
+
+
+def run_ols_training_example(
+    tsv_path: str,
+    seed: int,
+    subset_size: int = 50000,
+    k: int = 256,
+    batch_size_pairs: int = 256,
+    embed_batch_size: int = 64,
+    device: str = "cuda" if torch.cuda.is_available() else "cpu",
+    model_name: str = "sentence-transformers/all-mpnet-base-v2",
+    cache_dir: str = "./ols_cache",
+    ridge: float = 1e-4,
+):
+    cfg = SplitConfig(
+        subset_size=subset_size,
+        train_frac=0.90,
+        val_frac=0.05,
+        test_frac=0.05,
+        seed=seed,
+    )
+
+    train_loader, val_loader, test_loader, languages = prepare_parallel_data(
+        tsv_path,
+        cfg,
+        batch_size_pairs=batch_size_pairs,
+        num_workers=0,
+        pin_memory=device.startswith("cuda"),
+    )
+    del val_loader, test_loader, languages
+
+    base = HFEmbedder(
+        model_name=model_name,
+        device=device,
+        max_length=512,
+        normalize=True,
+    )
+    cache = DiskEmbeddingCache(cache_dir)
+    embed_src = CachedEmbedder(base, cache)
+    embed_tgt = embed_src
+
+    train_batches = make_pairwise_batches_from_loader(
+        train_loader,
+        embed_src,
+        embed_tgt,
+        device=device,
+        embed_batch_size=embed_batch_size,
+        neg_ratio=1.0,
+    )
+
+    model = train_ols(
+        train_batches,
+        k=k,
+        device=device,
+        ridge=ridge,
+    )
+    return model
+
+
+# ============================================================
+# 5) GCCA
 # ============================================================
 
 class MaskedGCCAProjector(nn.Module):
     """
     One linear projector per language into a shared k-dim space.
-    Supports missing views by using row indices.
     """
 
     def __init__(self, dims_by_lang: Dict[str, int], k: int):
@@ -431,7 +573,6 @@ class MaskedGCCAProjector(nn.Module):
             for lang in self.langs
         })
 
-        # learned during fitting for centering
         self.register_buffer("_dummy", torch.tensor(0.0), persistent=False)
         self.means_by_lang: Dict[str, torch.Tensor] = {}
 
@@ -478,7 +619,7 @@ class MaskedGCCAProjector(nn.Module):
 
                 mean = X.mean(dim=0, keepdim=True)
                 Xc = X - mean
-                self.means_by_lang[lang] = mean.detach().clone()
+                self.means_by_lang[lang] = mean.detach().cpu()
 
                 G_sub = G[idx]
 
@@ -512,37 +653,25 @@ class MaskedGCCAProjector(nn.Module):
             G_new[mask] = F.normalize(G_new[mask], dim=-1)
             G = G_new
 
-        self.G = G.detach().clone()
+        self.G = G.detach().cpu()
         return self
 
     @torch.no_grad()
     def project_language_matrix(self, lang: str, X: torch.Tensor) -> torch.Tensor:
-        """
-        Project a matrix of embeddings from one language.
-        """
         return self.forward(lang, X)
 
-
-# ============================================================
-# 5) Collect multilingual language views
-# ============================================================
 
 @torch.no_grad()
 def collect_language_views_from_loader(
     loader: DataLoader,
-    embed_fn_by_lang: Dict[str, Callable[[List[str]], torch.Tensor]],
+    embed_fn_by_lang: Dict[str, Callable[[Sequence[str]], torch.Tensor]],
     device: str = "cpu",
     embed_batch_size: int = 64,
 ):
     """
-    Builds one view per language with missing-view support.
-
     Returns:
         views[lang] = (X_lang, idx_lang)
-        n_total = number of shared items
-
-    Each TSV row defines one shared latent item id.
-    Both src and tgt sentences for that row point to the same item id.
+        n_total = number of shared row ids
     """
     emb_lists = defaultdict(list)
     idx_lists = defaultdict(list)
@@ -574,7 +703,7 @@ def collect_language_views_from_loader(
                 device,
             )
             emb_lists[lang].append(E)
-            idx_lists[lang].append(torch.tensor(src_pos[lang], device=device))
+            idx_lists[lang].append(torch.tensor(src_pos[lang], device=device, dtype=torch.long))
 
         for lang, sents in tgt_group.items():
             if lang not in embed_fn_by_lang:
@@ -586,7 +715,7 @@ def collect_language_views_from_loader(
                 device,
             )
             emb_lists[lang].append(E)
-            idx_lists[lang].append(torch.tensor(tgt_pos[lang], device=device))
+            idx_lists[lang].append(torch.tensor(tgt_pos[lang], device=device, dtype=torch.long))
 
         global_row += B
 
@@ -600,22 +729,16 @@ def collect_language_views_from_loader(
     return views, n_total
 
 
-# ============================================================
-# 7) End-to-end runner
-# ============================================================
-
 def run_gcca_training_example(
     tsv_path: str,
     seed: int,
     subset_size: int = 50000,
-    d: int = 768,
     k: int = 256,
     epochs: int = 10,
     batch_size_pairs: int = 256,
     embed_batch_size: int = 64,
-    use_dummy_embedder: bool = False,
-    ollama_model: str = "llama3.1:8b",
-    cache_dir: str = "./emb_cache_llama8b",
+    model_name: str = "sentence-transformers/all-mpnet-base-v2",
+    cache_dir: str = "./emb_cache",
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
 ):
     cfg = SplitConfig(
@@ -633,16 +756,14 @@ def run_gcca_training_example(
         num_workers=0,
         pin_memory=device.startswith("cuda"),
     )
+    del val_loader, test_loader
 
-    if use_dummy_embedder:
-        embed_fn_by_lang = None
-    else:
-        base = HFEmbedder(
-            model_name=ollama_model,
-            device=device,
-            max_length=512,
-            normalize=True,
-        )
+    base = HFEmbedder(
+        model_name=model_name,
+        device=device,
+        max_length=512,
+        normalize=True,
+    )
     cache = DiskEmbeddingCache(cache_dir)
 
     embed_fn_by_lang = {
@@ -651,7 +772,9 @@ def run_gcca_training_example(
     }
 
     print(f"Languages: {languages}")
+    print(f"Embedder hidden size: {base.dim}")
     print("Collecting training views...")
+
     views, n_total = collect_language_views_from_loader(
         loader=train_loader,
         embed_fn_by_lang=embed_fn_by_lang,
@@ -659,7 +782,7 @@ def run_gcca_training_example(
         embed_batch_size=embed_batch_size,
     )
 
-    dims_by_lang = {lang: d for lang in languages}
+    dims_by_lang = {lang: base.dim for lang in languages}
     model = MaskedGCCAProjector(dims_by_lang=dims_by_lang, k=k).to(device)
 
     print("Fitting GCCA...")
@@ -671,47 +794,41 @@ def run_gcca_training_example(
         verbose=True,
     )
 
-    print("Evaluating on validation set...")
-
     return model
 
 
 # ============================================================
-# 8) Example main
+# 6) Example main
 # ============================================================
 
 if __name__ == "__main__":
-    # Replace with your file path
     TSV_PATH = "your_parallel_data.tsv"
 
-    # Quick smoke test with dummy embeddings:
-    # result = run_gcca_training_example(
+    # OLS smoke test
+    # ols = run_ols_training_example(
     #     tsv_path=TSV_PATH,
     #     seed=42,
-    #     subset_size=5000,
-    #     d=768,
-    #     k=256,
-    #     epochs=5,
-    #     batch_size_pairs=128,
-    #     embed_batch_size=64,
-    #     use_dummy_embedder=True,
+    #     subset_size=500,
+    #     k=128,
+    #     batch_size_pairs=64,
+    #     embed_batch_size=16,
+    #     model_name="sentence-transformers/all-mpnet-base-v2",
+    #     cache_dir="./ols_cache",
+    #     device="cuda" if torch.cuda.is_available() else "cpu",
     # )
 
-    # Real run with Ollama:
-    # result = run_gcca_training_example(
+    # GCCA smoke test
+    # gcca = run_gcca_training_example(
     #     tsv_path=TSV_PATH,
     #     seed=42,
-    #     subset_size=50000,
-    #     d=768,
-    #     k=256,
-    #     epochs=10,
-    #     batch_size_pairs=128,
-    #     embed_batch_size=32,
-    #     use_dummy_embedder=False,
-    #     ollama_model="llama3.1:8b",
-    #     cache_dir="./emb_cache_llama8b",
+    #     subset_size=500,
+    #     k=128,
+    #     epochs=2,
+    #     batch_size_pairs=64,
+    #     embed_batch_size=16,
+    #     model_name="sentence-transformers/all-mpnet-base-v2",
+    #     cache_dir="./gcca_cache",
+    #     device="cuda" if torch.cuda.is_available() else "cpu",
     # )
 
-    # print("Validation:", result["val_metrics"])
-    # print("Test:", result["test_metrics"])
     pass
