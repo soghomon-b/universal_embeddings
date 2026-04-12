@@ -375,11 +375,12 @@ def run_full_eval(
                 + ", ".join(f"{k}:{v:.4f}" for k, v in r.recall_at_k.items())
                 + "\n"
             )
-
         f.write("\n=== DISTANCE RESULTS ===\n")
         for name in sorted(distance_results.keys()):
             r = distance_results[name]
             f.write(f"\n[{name}]\n")
+
+            f.write("[same-meaning pairs]\n")
             f.write(f"Avg cosine similarity: {r.avg_cosine_similarity:.6f}\n")
             f.write(f"Avg cosine distance:   {r.avg_cosine_distance:.6f}\n")
             f.write(f"Std cosine distance:   {r.std_cosine_distance:.6f}\n")
@@ -388,8 +389,20 @@ def run_full_eval(
             f.write(f"Groups used:           {r.n_groups}\n")
             f.write(f"Pairs used:            {r.n_pairs}\n")
 
+            f.write("\n[random cross-group pairs]\n")
+            f.write(f"Avg cosine similarity: {r.random_avg_cosine_similarity:.6f}\n")
+            f.write(f"Avg cosine distance:   {r.random_avg_cosine_distance:.6f}\n")
+            f.write(f"Std cosine distance:   {r.random_std_cosine_distance:.6f}\n")
+            f.write(f"Min cosine distance:   {r.random_min_cosine_distance:.6f}\n")
+            f.write(f"Max cosine distance:   {r.random_max_cosine_distance:.6f}\n")
+            f.write(f"Random pairs used:     {r.n_random_pairs}\n")
+
+            f.write("\n[separation]\n")
+            f.write(f"Similarity gap:        {r.similarity_gap:.6f}\n")
+            f.write(f"Distance gap:          {r.distance_gap:.6f}\n")
+
             if r.group_summaries is not None:
-                f.write("Group summaries:\n")
+                f.write("\nGroup summaries:\n")
                 for gs in r.group_summaries:
                     f.write(
                         f"  group={gs.group_id} n_sentences={gs.n_sentences} "
