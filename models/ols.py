@@ -37,7 +37,7 @@ class OLS(nn.Module):
         # load into linear layer
         self.proj.weight.copy_(W.T)
 
-def train_ols(data_loader, k, device="cpu", ridge=1e-4):
+def train_ols(data_loader, k, device="cpu", ridge=1e-4, d =768):
     first_batch = True
     XtX = None
     XtY = None
@@ -124,6 +124,6 @@ def run_ols_training_example(
         neg_ratio=1.0
     )
 
-    model = train_ols(train_batches, d=d, k=k, device=device)
+    model = train_ols(train_batches, k=k, device=device)
 
     return model
