@@ -570,14 +570,11 @@ def run_vecmap_training_example(
     if hub_lang is None:
         hub_lang = lang_counts.most_common(1)[0][0]
 
-    dims_by_lang = {lang: X.shape[1] for lang, (X, _) in views.items()}
-
     print(f"Languages: {languages}")
     print(f"Hub language: {hub_lang}")
 
     model = fit_vecmap_multilingual(
         views=views,
-        dims_by_lang=dims_by_lang,
         hub_lang=hub_lang,
         num_iters=num_iters,
         max_pairs_per_iter=max_pairs_per_iter,
