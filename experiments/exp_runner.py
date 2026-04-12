@@ -174,7 +174,7 @@ def run_experiment(
     # ---- Retrieval groups ----
     print(f"------{exp_number}----------Evaluation------{exp_number}----------")
     print("--------Eval Data Retreival--------")
-    retrieval_groups = extract_parallel_maxcover(
+    retrieval_groups, retreival_groups_2 = extract_parallel_maxcover(
         EVAL_SENTENCES_DIR,
         EVAL_LINKS_DIR,
         languages,
