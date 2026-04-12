@@ -1,11 +1,18 @@
 import os
+import random
+import hashlib
+import json
+from json import JSONDecodeError
+from dataclasses import dataclass
 from collections import defaultdict, Counter
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
+import requests
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import DataLoader
+from torch.utils.data import Dataset, DataLoader
+
 
 from .data_loader import (
     SplitConfig,
@@ -17,44 +24,220 @@ from .data_loader import (
 
 
 # ============================================================
-# 1) Embedding helper
+# 1) TSV parsing + splitting
+# ============================================================
+
+@dataclass
+class SplitConfig:
+    subset_size: Optional[int] = None
+    train_frac: float = 0.90
+    val_frac: float = 0.05
+    test_frac: float = 0.05
+    seed: int = 42
+
+    def __post_init__(self):
+        s = self.train_frac + self.val_frac + self.test_frac
+        if abs(s - 1.0) > 1e-6:
+            raise ValueError(f"Fractions must sum to 1.0, got {s}")
+
+
+def parse_parallel_tsv_line(line: str) -> Optional[Tuple[str, str, str, str]]:
+    line = line.rstrip("\n")
+    if not line:
+        return None
+    parts = line.split("\t")
+    if len(parts) < 4:
+        return None
+    src_lang, tgt_lang = parts[0], parts[1]
+    src_sent = parts[2].strip()
+    tgt_sent = parts[3].strip()
+    if not src_sent or not tgt_sent:
+        return None
+    return src_lang, tgt_lang, src_sent, tgt_sent
+
+
+def reservoir_sample_tsv(
+    path: str,
+    k: int,
+    seed: int = 42,
+    max_lines: Optional[int] = None,
+) -> List[Tuple[str, str, str, str]]:
+    rng = random.Random(seed)
+    sample: List[Tuple[str, str, str, str]] = []
+    seen = 0
+
+    with open(path, "r", encoding="utf-8") as f:
+        for line_idx, line in enumerate(f):
+            if max_lines is not None and line_idx >= max_lines:
+                break
+
+            item = parse_parallel_tsv_line(line)
+            if item is None:
+                continue
+
+            seen += 1
+            if len(sample) < k:
+                sample.append(item)
+            else:
+                j = rng.randrange(seen)
+                if j < k:
+                    sample[j] = item
+
+    if not sample:
+        raise ValueError("No valid examples were parsed from the TSV.")
+    return sample
+
+
+def load_all_tsv(
+    path: str,
+    max_lines: Optional[int] = None,
+) -> List[Tuple[str, str, str, str]]:
+    out = []
+    with open(path, "r", encoding="utf-8") as f:
+        for line_idx, line in enumerate(f):
+            if max_lines is not None and line_idx >= max_lines:
+                break
+            item = parse_parallel_tsv_line(line)
+            if item is not None:
+                out.append(item)
+    if not out:
+        raise ValueError("No valid examples were parsed from the TSV.")
+    return out
+
+
+def extract_languages(examples: Sequence[Tuple[str, str, str, str]]) -> List[str]:
+    langs = set()
+    for src_lang, tgt_lang, _, _ in examples:
+        langs.add(src_lang)
+        langs.add(tgt_lang)
+    return sorted(langs)
+
+
+def make_splits(
+    examples: Sequence[Tuple[str, str, str, str]],
+    cfg: SplitConfig,
+) -> Tuple[
+    List[Tuple[str, str, str, str]],
+    List[Tuple[str, str, str, str]],
+    List[Tuple[str, str, str, str]],
+]:
+    rng = random.Random(cfg.seed)
+    ex = list(examples)
+    rng.shuffle(ex)
+
+    n = len(ex)
+    n_train = int(n * cfg.train_frac)
+    n_val = int(n * cfg.val_frac)
+    n_test = n - n_train - n_val
+
+    train = ex[:n_train]
+    val = ex[n_train:n_train + n_val]
+    test = ex[n_train + n_val:]
+    assert len(test) == n_test
+    return train, val, test
+
+
+# ============================================================
+# 2) Dataset + collate
+# ============================================================
+
+class ParallelTextDataset(Dataset):
+    def __init__(self, examples: Sequence[Tuple[str, str, str, str]]):
+        self.examples = list(examples)
+
+    def __len__(self) -> int:
+        return len(self.examples)
+
+    def __getitem__(self, idx: int):
+        return self.examples[idx]
+
+
+def collate_parallel(batch):
+    src_langs, tgt_langs, s1, s2 = zip(*batch)
+    return list(src_langs), list(tgt_langs), list(s1), list(s2)
+
+
+def prepare_parallel_data(
+    tsv_path: str,
+    cfg: SplitConfig,
+    batch_size_pairs: int = 256,
+    num_workers: int = 0,
+    pin_memory: bool = True,
+    max_lines: Optional[int] = None,
+):
+    if not os.path.exists(tsv_path):
+        raise FileNotFoundError(tsv_path)
+
+    if cfg.subset_size is None:
+        examples = load_all_tsv(tsv_path, max_lines=max_lines)
+    else:
+        examples = reservoir_sample_tsv(
+            tsv_path, k=cfg.subset_size, seed=cfg.seed, max_lines=max_lines
+        )
+
+    languages = extract_languages(examples)
+    train_ex, val_ex, test_ex = make_splits(examples, cfg)
+
+    train_loader = DataLoader(
+        ParallelTextDataset(train_ex),
+        batch_size=batch_size_pairs,
+        shuffle=True,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        collate_fn=collate_parallel,
+        drop_last=True,
+    )
+    val_loader = DataLoader(
+        ParallelTextDataset(val_ex),
+        batch_size=batch_size_pairs,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        collate_fn=collate_parallel,
+        drop_last=False,
+    )
+    test_loader = DataLoader(
+        ParallelTextDataset(test_ex),
+        batch_size=batch_size_pairs,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        collate_fn=collate_parallel,
+        drop_last=False,
+    )
+
+    return train_loader, val_loader, test_loader, languages
+
+
+# ============================================================
+# 3) Embedding helpers
 # ============================================================
 
 @torch.no_grad()
 def embed_sentences_in_batches(
     sentences: List[str],
-    embed_fn: Callable[[Sequence[str]], torch.Tensor],
+    embed_fn: Callable[[List[str]], torch.Tensor],
     batch_size: int,
     device: str,
 ) -> torch.Tensor:
-    if len(sentences) == 0:
-        raise ValueError("embed_sentences_in_batches got an empty sentence list")
-
     embs = []
     for i in range(0, len(sentences), batch_size):
         chunk = sentences[i:i + batch_size]
         e = embed_fn(chunk)
-
         if not torch.is_tensor(e):
             e = torch.tensor(e, dtype=torch.float32)
-
-        if e.ndim == 1:
-            e = e.unsqueeze(0)
-
         e = e.float().to(device)
         embs.append(e)
-
     return torch.cat(embs, dim=0)
 
-
 # ============================================================
-# 2) Collect per-language views
+# 4) Collect per-language views
 # ============================================================
 
 @torch.no_grad()
 def collect_language_views_from_loader(
     loader: DataLoader,
-    embed_fn_by_lang: Dict[str, Callable[[Sequence[str]], torch.Tensor]],
+    embed_fn_by_lang: Dict[str, Callable[[List[str]], torch.Tensor]],
     device: str = "cpu",
     embed_batch_size: int = 64,
 ):
@@ -62,7 +245,8 @@ def collect_language_views_from_loader(
     Returns:
         views[lang] = (X_lang, idx_lang)
         n_total = number of shared item ids
-        lang_counts = count of examples per language
+
+    Each TSV row defines one shared item id.
     """
     emb_lists = defaultdict(list)
     idx_lists = defaultdict(list)
@@ -88,26 +272,18 @@ def collect_language_views_from_loader(
             lang_counts[lang] += 1
 
         for lang, sents in src_group.items():
-            if lang not in embed_fn_by_lang:
-                raise KeyError(f"No embedder found for source language '{lang}'")
             E = embed_sentences_in_batches(
                 sents, embed_fn_by_lang[lang], embed_batch_size, device
             )
             emb_lists[lang].append(E)
-            idx_lists[lang].append(
-                torch.tensor(src_pos[lang], device=device, dtype=torch.long)
-            )
+            idx_lists[lang].append(torch.tensor(src_pos[lang], device=device))
 
         for lang, sents in tgt_group.items():
-            if lang not in embed_fn_by_lang:
-                raise KeyError(f"No embedder found for target language '{lang}'")
             E = embed_sentences_in_batches(
                 sents, embed_fn_by_lang[lang], embed_batch_size, device
             )
             emb_lists[lang].append(E)
-            idx_lists[lang].append(
-                torch.tensor(tgt_pos[lang], device=device, dtype=torch.long)
-            )
+            idx_lists[lang].append(torch.tensor(tgt_pos[lang], device=device))
 
         global_row += B
 
@@ -121,7 +297,7 @@ def collect_language_views_from_loader(
 
 
 # ============================================================
-# 3) VecMap-style multilingual model
+# 5) VecMap-style multilingual model
 # ============================================================
 
 class VecMapProjector(nn.Module):
@@ -137,9 +313,6 @@ class VecMapProjector(nn.Module):
         self.hub_lang = hub_lang
         self.dims_by_lang = dims_by_lang
 
-        if hub_lang not in dims_by_lang:
-            raise KeyError(f"hub_lang '{hub_lang}' not found in dims_by_lang")
-
         hub_dim = dims_by_lang[hub_lang]
         self.projs = nn.ModuleDict()
 
@@ -147,23 +320,21 @@ class VecMapProjector(nn.Module):
             if d != hub_dim:
                 raise ValueError(
                     f"All dims must match for this simplified VecMap. "
-                    f"Got {lang}: {d}, hub {hub_lang}: {hub_dim}"
+                    f"Got {lang}: {d}, hub: {hub_dim}"
                 )
-
             layer = nn.Linear(d, hub_dim, bias=False)
-            layer.weight.data.copy_(torch.eye(hub_dim, dtype=layer.weight.dtype))
+            if lang == hub_lang:
+                layer.weight.data.copy_(torch.eye(hub_dim))
+            else:
+                layer.weight.data.copy_(torch.eye(hub_dim))
             self.projs[lang] = layer
 
         self.means_by_lang: Dict[str, torch.Tensor] = {}
 
     def forward(self, lang: str, x: torch.Tensor) -> torch.Tensor:
-        if lang not in self.projs:
-            raise KeyError(f"Unknown language: {lang}")
-
         mean = self.means_by_lang.get(lang, None)
         if mean is not None:
             x = x - mean.to(device=x.device, dtype=x.dtype)
-
         z = self.projs[lang](x)
         return F.normalize(z, dim=-1)
 
@@ -173,7 +344,7 @@ class VecMapProjector(nn.Module):
 
 
 # ============================================================
-# 4) VecMap utilities
+# 6) VecMap utilities
 # ============================================================
 
 @torch.no_grad()
@@ -196,12 +367,6 @@ def orthogonal_procrustes(X: torch.Tensor, Y: torch.Tensor) -> torch.Tensor:
     X: (n, d), Y: (n, d)
     Returns W: (d, d)
     """
-    if X.ndim != 2 or Y.ndim != 2:
-        raise ValueError(f"Expected 2D matrices, got X={tuple(X.shape)} Y={tuple(Y.shape)}")
-
-    if X.shape != Y.shape:
-        raise ValueError(f"Shape mismatch for Procrustes: X={tuple(X.shape)} Y={tuple(Y.shape)}")
-
     M = X.T @ Y
     U, _, Vt = torch.linalg.svd(M, full_matrices=False)
     W = U @ Vt
@@ -219,7 +384,6 @@ def intersect_by_item_ids(
     pos_b = {int(v): j for j, v in enumerate(idx_b.tolist())}
     a_pos = []
     b_pos = []
-
     for i, v in enumerate(idx_a.tolist()):
         j = pos_b.get(int(v), None)
         if j is not None:
@@ -266,7 +430,7 @@ def nearest_neighbor_dictionary(
 
 
 # ============================================================
-# 5) Fit multilingual VecMap-style aligner
+# 7) Fit multilingual VecMap-style aligner
 # ============================================================
 
 @torch.no_grad()
@@ -283,38 +447,32 @@ def fit_vecmap_multilingual(
     views[lang] = (X_lang, idx_lang)
       X_lang:   (n_lang, d)
       idx_lang: (n_lang,) shared item ids
-    """
-    if hub_lang not in views:
-        raise KeyError(f"hub_lang '{hub_lang}' not found in views")
 
+    Strategy:
+      - center + normalize each language
+      - initialize from true overlaps with the hub
+      - iterative self-learning using nearest-neighbor pseudo dictionaries
+      - refit using orthogonal Procrustes
+    """
     device = next(iter(views.values()))[0].device
     dtype = next(iter(views.values()))[0].dtype
-
     dims_by_lang = {lang: X.shape[1] for lang, (X, _) in views.items()}
-    hub_dim = dims_by_lang[hub_lang]
-
-    for lang, d in dims_by_lang.items():
-        if d != hub_dim:
-            raise ValueError(
-                f"All language views must have same dim for simplified VecMap. "
-                f"Got {lang}: {d}, hub {hub_lang}: {hub_dim}"
-            )
 
     model = VecMapProjector(dims_by_lang=dims_by_lang, hub_lang=hub_lang).to(device)
 
+    # preprocess all views once
     proc_views = {}
     for lang, (X, idx) in views.items():
         X = X.to(device=device, dtype=dtype)
-        idx = idx.to(device=device, dtype=torch.long)
-
+        idx = idx.to(device=device)
         Xn, mean = center_and_normalize(X)
         proc_views[lang] = (Xn, idx)
-        model.means_by_lang[lang] = mean.detach().cpu()
+        model.means_by_lang[lang] = mean.detach().clone()
 
     X_hub, idx_hub = proc_views[hub_lang]
-    d = X_hub.shape[1]
 
-    # hub is exact identity in true hub dim
+    # hub is identity
+    d = X_hub.shape[1]
     model.projs[hub_lang].weight.copy_(torch.eye(d, device=device, dtype=dtype))
 
     for lang in model.langs:
@@ -323,6 +481,7 @@ def fit_vecmap_multilingual(
 
         X_lang, idx_lang = proc_views[lang]
 
+        # ---- initialization from true bilingual overlaps with hub
         src_pos, hub_pos = intersect_by_item_ids(idx_lang, idx_hub)
 
         if src_pos.numel() == 0:
@@ -337,6 +496,7 @@ def fit_vecmap_multilingual(
         if verbose:
             print(f"[VecMap] {lang}: init pairs = {src_pos.numel()}")
 
+        # ---- self-learning iterations
         for it in range(num_iters):
             X_lang_mapped = length_normalize(X_lang @ W)
 
@@ -356,20 +516,22 @@ def fit_vecmap_multilingual(
 
 
 # ============================================================
-# 6) End-to-end runner
+# 8) End-to-end runner
 # ============================================================
 
 def run_vecmap_training_example(
     tsv_path: str,
     seed: int,
     subset_size: int = 50000,
+    d: int = 768,
     batch_size_pairs: int = 256,
     embed_batch_size: int = 64,
     hub_lang: Optional[str] = None,
     num_iters: int = 5,
     max_pairs_per_iter: Optional[int] = 20000,
+    use_dummy_embedder: bool = False,
     ollama_model: str = "llama3.1:8b",
-    device: str = "cuda" if torch.cuda.is_available() else "cpu",
+    device: str = "cuda" if torch.cuda.is_available() else "cpu", 
     cache_dir: str = "./vecmap_cache",
 ):
     cfg = SplitConfig(
@@ -387,15 +549,16 @@ def run_vecmap_training_example(
         num_workers=0,
         pin_memory=device.startswith("cuda"),
     )
-    del val_loader, test_loader
 
-    base = HFEmbedder(model_name=ollama_model, device=device)
-    cache = DiskEmbeddingCache(cache_dir)
-
-    embed_fn_by_lang = {
-        lang: CachedEmbedder(base, cache)
-        for lang in languages
-    }
+    if use_dummy_embedder:
+        embed_fn_by_lang = None
+    else:
+        base = HFEmbedder(model_name=ollama_model, device=device)
+        cache = DiskEmbeddingCache(cache_dir)
+        embed_fn_by_lang = {
+            lang: CachedEmbedder(base, cache)
+            for lang in languages
+        }
 
     views, n_total, lang_counts = collect_language_views_from_loader(
         loader=train_loader,
@@ -403,20 +566,18 @@ def run_vecmap_training_example(
         device=device,
         embed_batch_size=embed_batch_size,
     )
-    del n_total
-
-    if not views:
-        raise ValueError("No language views were collected")
 
     if hub_lang is None:
         hub_lang = lang_counts.most_common(1)[0][0]
 
+    dims_by_lang = {lang: X.shape[1] for lang, (X, _) in views.items()}
+
     print(f"Languages: {languages}")
     print(f"Hub language: {hub_lang}")
-    print(f"Detected embedding dim: {next(iter(views.values()))[0].shape[1]}")
 
     model = fit_vecmap_multilingual(
         views=views,
+        dims_by_lang=dims_by_lang,
         hub_lang=hub_lang,
         num_iters=num_iters,
         max_pairs_per_iter=max_pairs_per_iter,
@@ -426,21 +587,39 @@ def run_vecmap_training_example(
     return model
 
 
+# ============================================================
+# 9) Example main
+# ============================================================
+
 if __name__ == "__main__":
     TSV_PATH = "your_parallel_data.tsv"
 
-    # Smoke test:
+    # Dummy smoke test
     # model = run_vecmap_training_example(
     #     tsv_path=TSV_PATH,
     #     seed=42,
-    #     subset_size=500,
-    #     batch_size_pairs=64,
-    #     embed_batch_size=16,
+    #     subset_size=5000,
+    #     d=768,
+    #     batch_size_pairs=128,
+    #     embed_batch_size=64,
     #     hub_lang=None,
-    #     num_iters=2,
-    #     ollama_model="sentence-transformers/all-mpnet-base-v2",
-    #     cache_dir="./vecmap_cache",
-    #     device="cuda" if torch.cuda.is_available() else "cpu",
+    #     num_iters=3,
+    #     use_dummy_embedder=True,
+    # )
+
+    # Real Ollama run
+    # model = run_vecmap_training_example(
+    #     tsv_path=TSV_PATH,
+    #     seed=42,
+    #     subset_size=50000,
+    #     d=768,
+    #     batch_size_pairs=128,
+    #     embed_batch_size=32,
+    #     hub_lang=None,
+    #     num_iters=5,
+    #     use_dummy_embedder=False,
+    #     ollama_model="llama3.1:8b",
+    #     cache_dir="./emb_cache_llama8b",
     # )
 
     pass
