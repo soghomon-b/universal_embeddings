@@ -345,6 +345,8 @@ def run_full_eval(
             )
 
         distance_results[name] = distance_report
+    
+    
 
     # --- Write report
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -400,6 +402,7 @@ def run_full_eval(
             f.write("\n[separation]\n")
             f.write(f"Similarity gap:        {r.similarity_gap:.6f}\n")
             f.write(f"Distance gap:          {r.distance_gap:.6f}\n")
+            f.write(f"Prob(similar sim > random sim): {r.prob_similar_similarity_gt_random_similarity:.6f}\n")
 
             if r.group_summaries is not None:
                 f.write("\nGroup summaries:\n")

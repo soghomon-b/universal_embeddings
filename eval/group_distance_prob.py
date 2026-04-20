@@ -134,7 +134,6 @@ class DistanceEvalReport:
 
     similarity_gap: float
     distance_gap: float
-    prob_similar_similarity_gt_random_similarity: float
 
     n_groups: int
     n_pairs: int
@@ -336,23 +335,6 @@ class UniversalEmbeddingDistanceEvaluator:
         avg_similarity = float(similarities.mean())
         avg_distance = float(distances.mean())
 
-        similarities = np.array([x.cosine_similarity for x in pair_results], dtype=np.float32)
-        similarities, distances = self._safe_cosine_stats(similarities)
-
-        if random_pair_results:
-            random_similarities = np.array(
-                [x.cosine_similarity for x in random_pair_results], dtype=np.float32
-            )
-            random_similarities, random_distances = self._safe_cosine_stats(random_similarities)
-
-            prob_similar_beats_random = float(
-                (similarities[:, None] > random_similarities[None, :]).mean()
-            )
-        else:
-            random_similarities = np.array([], dtype=np.float32)
-            random_distances = np.array([], dtype=np.float32)
-            prob_similar_beats_random = float("nan")
-
         return DistanceEvalReport(
             avg_cosine_similarity=avg_similarity,
             avg_cosine_distance=avg_distance,
@@ -366,7 +348,6 @@ class UniversalEmbeddingDistanceEvaluator:
             random_max_cosine_distance=random_max_distance,
             similarity_gap=float(avg_similarity - random_avg_similarity) if len(random_similarities) else float("nan"),
             distance_gap=float(random_avg_distance - avg_distance) if len(random_distances) else float("nan"),
-            prob_similar_similarity_gt_random_similarity=prob_similar_beats_random,
             n_groups=len(group_summaries),
             n_pairs=len(pair_results),
             n_random_pairs=len(random_pair_results),
