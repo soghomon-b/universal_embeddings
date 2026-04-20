@@ -105,8 +105,7 @@ def run_experiment(
     gcca = run_gcca_training_example(DATA_DIR, seed, ollama_model=MODEL_NAME, cache_dir=CACHE_DIR, batch_size_pairs=BATCH, k=K_grad, epochs=epochs)
 
     print("--------vecMap--------")
-    vecMap = run_vecmap_training_example(DATA_DIR, seed, ollama_model=MODEL_NAME, cache_dir=CACHE_DIR, batch_size_pairs=BATCH, subset_size=BATCH,embed_batch_size=BATCH)
-
+    vecMap = run_vecmap_training_example(DATA_DIR, seed, ollama_model=MODEL_NAME, cache_dir=CACHE_DIR)
     print("--------muse--------")
     muse = run_bitext_training_example(DATA_DIR, seed, model_name=MODEL_NAME, cache_dir=CACHE_DIR, batch_size_pairs=BATCH, subset_size=BATCH, epochs=epochs)
 
