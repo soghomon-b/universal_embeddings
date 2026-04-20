@@ -77,7 +77,7 @@ def run_experiment(
     D, K_grad = geometric.shape
 
     print("--------Inforce--------")
-    inforce = run_inforce_training_example(DATA_DIR, seed, data_size, D, K_grad, epochs, BATCH, DEVICE_STR, ollama_model=MODEL_NAME, batches=BATCH, cache_dir=CACHE_DIR)
+    inforce = run_inforce_training_example(DATA_DIR, seed, data_size, D, K_grad, epochs, BATCH, DEVICE_STR, ollama_model=MODEL_NAME, cache_dir=CACHE_DIR)
     print("--------pairwise--------")
     pairwise = run_pairwise_training_example(DATA_DIR, seed, data_size, D, K_grad, epochs, BATCH, DEVICE_STR, ollama_model=MODEL_NAME, cache_dir=CACHE_DIR)
 
