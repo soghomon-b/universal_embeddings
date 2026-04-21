@@ -1,0 +1,366 @@
+Experiment: exp_lf14
+Generated:  2026-04-20 12:17:27
+
+=== SETTINGS ===
+projection_mode                 = subspace_coords
+retrieval_K                    = 10
+retrieval_trials               = 500
+distance_require_different_langs = True
+distance_return_group_summaries  = False
+seed                           = 76
+base_abtt_remove               = 2
+
+=== CKA (between projection matrices V) ===
+                    base  base_abttz     infonce    pairwise      supcon   geometric         ols        gcca      vecMap        muse          ot       dvcca
+base              1.0000      0.0613      0.0110      0.0104      0.0091      0.0370      0.0025      0.0000      0.0000      0.0000      0.0000      0.0000
+base_abttz        0.0613      1.0000      0.1698      0.1857      0.1644      0.6140      0.0162      0.0000      0.0000      0.0000      0.0000      0.0000
+infonce           0.0110      0.1698      1.0000      0.1329      0.1285      0.1471      0.0832      0.0000      0.0000      0.0000      0.0000      0.0000
+pairwise          0.0104      0.1857      0.1329      1.0000      0.1240      0.1520      0.0788      0.0000      0.0000      0.0000      0.0000      0.0000
+supcon            0.0091      0.1644      0.1285      0.1240      1.0000      0.1412      0.0829      0.0000      0.0000      0.0000      0.0000      0.0000
+geometric         0.0370      0.6140      0.1471      0.1520      0.1412      1.0000      0.0121      0.0000      0.0000      0.0000      0.0000      0.0000
+ols               0.0025      0.0162      0.0832      0.0788      0.0829      0.0121      1.0000      0.0000      0.0000      0.0000      0.0000      0.0000
+gcca              0.0000      0.0000      0.0000      0.0000      0.0000      0.0000      0.0000      0.0000      0.0000      0.0000      0.0000      0.0000
+vecMap            0.0000      0.0000      0.0000      0.0000      0.0000      0.0000      0.0000      0.0000      0.0000      0.0000      0.0000      0.0000
+muse              0.0000      0.0000      0.0000      0.0000      0.0000      0.0000      0.0000      0.0000      0.0000      0.0000      0.0000      0.0000
+ot                0.0000      0.0000      0.0000      0.0000      0.0000      0.0000      0.0000      0.0000      0.0000      0.0000      0.0000      0.0000
+dvcca             0.0000      0.0000      0.0000      0.0000      0.0000      0.0000      0.0000      0.0000      0.0000      0.0000      0.0000      0.0000
+
+=== RETRIEVAL RESULTS ===
+
+[base]
+Accuracy@1: 0.8760
+MRR:        0.9182
+Recall@k:   1:0.8760, 3:0.9500, 5:0.9680
+
+[base_abttz]
+Accuracy@1: 0.1680
+MRR:        0.3500
+Recall@k:   1:0.1680, 3:0.3760, 5:0.5220
+
+[dvcca]
+Accuracy@1: 0.6940
+MRR:        0.7717
+Recall@k:   1:0.6940, 3:0.8000, 5:0.8760
+
+[gcca]
+Accuracy@1: 0.1040
+MRR:        0.2917
+Recall@k:   1:0.1040, 3:0.2840, 5:0.5040
+
+[geometric]
+Accuracy@1: 0.8840
+MRR:        0.9189
+Recall@k:   1:0.8840, 3:0.9460, 5:0.9680
+
+[infonce]
+Accuracy@1: 0.8540
+MRR:        0.8966
+Recall@k:   1:0.8540, 3:0.9120, 5:0.9460
+
+[muse]
+Accuracy@1: 0.8860
+MRR:        0.9230
+Recall@k:   1:0.8860, 3:0.9460, 5:0.9720
+
+[ols]
+Accuracy@1: 0.8640
+MRR:        0.9063
+Recall@k:   1:0.8640, 3:0.9360, 5:0.9660
+
+[ot]
+Accuracy@1: 0.1020
+MRR:        0.2879
+Recall@k:   1:0.1020, 3:0.2880, 5:0.5040
+
+[pairwise]
+Accuracy@1: 0.8660
+MRR:        0.9050
+Recall@k:   1:0.8660, 3:0.9240, 5:0.9600
+
+[supcon]
+Accuracy@1: 0.8600
+MRR:        0.9034
+Recall@k:   1:0.8600, 3:0.9280, 5:0.9640
+
+[vecMap]
+Accuracy@1: 0.7820
+MRR:        0.8288
+Recall@k:   1:0.7820, 3:0.8400, 5:0.8680
+
+=== DISTANCE RESULTS ===
+
+[base]
+[same-meaning pairs]
+Avg cosine similarity: 0.999549
+Avg cosine distance:   0.000451
+Std cosine distance:   0.000362
+Min cosine distance:   0.000000
+Max cosine distance:   0.003231
+Groups used:           2000
+Pairs used:            704909
+
+[random cross-group pairs]
+Avg cosine similarity: 0.998578
+Avg cosine distance:   0.001422
+Std cosine distance:   0.000375
+Min cosine distance:   0.000285
+Max cosine distance:   0.003425
+Random pairs used:     10000
+
+[separation]
+Similarity gap:        0.000971
+Distance gap:          0.000971
+Prob(similar sim > random sim): 0.960042
+
+[base_abttz]
+[same-meaning pairs]
+Avg cosine similarity: -0.033277
+Avg cosine distance:   1.033277
+Std cosine distance:   0.202541
+Min cosine distance:   0.000000
+Max cosine distance:   1.997074
+Groups used:           2000
+Pairs used:            704909
+
+[random cross-group pairs]
+Avg cosine similarity: -0.000437
+Avg cosine distance:   1.000437
+Std cosine distance:   0.104764
+Min cosine distance:   0.593600
+Max cosine distance:   1.457883
+Random pairs used:     10000
+
+[separation]
+Similarity gap:        -0.032840
+Distance gap:          -0.032840
+Prob(similar sim > random sim): 0.428885
+
+[dvcca]
+[same-meaning pairs]
+Avg cosine similarity: 0.999990
+Avg cosine distance:   0.000010
+Std cosine distance:   0.000008
+Min cosine distance:   0.000000
+Max cosine distance:   0.000134
+Groups used:           2000
+Pairs used:            704909
+
+[random cross-group pairs]
+Avg cosine similarity: 0.999980
+Avg cosine distance:   0.000020
+Std cosine distance:   0.000012
+Min cosine distance:   0.000005
+Max cosine distance:   0.000147
+Random pairs used:     10000
+
+[separation]
+Similarity gap:        0.000010
+Distance gap:          0.000010
+Prob(similar sim > random sim): 0.840449
+
+[gcca]
+[same-meaning pairs]
+Avg cosine similarity: 0.000434
+Avg cosine distance:   0.999566
+Std cosine distance:   0.095729
+Min cosine distance:   0.406391
+Max cosine distance:   1.397776
+Groups used:           2000
+Pairs used:            704909
+
+[random cross-group pairs]
+Avg cosine similarity: 0.022231
+Avg cosine distance:   0.977769
+Std cosine distance:   0.166087
+Min cosine distance:   0.055433
+Max cosine distance:   1.342503
+Random pairs used:     10000
+
+[separation]
+Similarity gap:        -0.021797
+Distance gap:          -0.021797
+Prob(similar sim > random sim): 0.488559
+
+[geometric]
+[same-meaning pairs]
+Avg cosine similarity: 0.776878
+Avg cosine distance:   0.223122
+Std cosine distance:   0.171840
+Min cosine distance:   0.000000
+Max cosine distance:   0.949573
+Groups used:           2000
+Pairs used:            704909
+
+[random cross-group pairs]
+Avg cosine similarity: 0.352602
+Avg cosine distance:   0.647398
+Std cosine distance:   0.103502
+Min cosine distance:   0.180005
+Max cosine distance:   1.026287
+Random pairs used:     10000
+
+[separation]
+Similarity gap:        0.424276
+Distance gap:          0.424276
+Prob(similar sim > random sim): 0.963561
+
+[infonce]
+[same-meaning pairs]
+Avg cosine similarity: 0.807990
+Avg cosine distance:   0.192010
+Std cosine distance:   0.140194
+Min cosine distance:   0.000000
+Max cosine distance:   0.864207
+Groups used:           2000
+Pairs used:            704909
+
+[random cross-group pairs]
+Avg cosine similarity: 0.495841
+Avg cosine distance:   0.504159
+Std cosine distance:   0.093151
+Min cosine distance:   0.130001
+Max cosine distance:   1.015259
+Random pairs used:     10000
+
+[separation]
+Similarity gap:        0.312149
+Distance gap:          0.312149
+Prob(similar sim > random sim): 0.945653
+
+[muse]
+[same-meaning pairs]
+Avg cosine similarity: 0.871867
+Avg cosine distance:   0.128133
+Std cosine distance:   0.088191
+Min cosine distance:   0.000000
+Max cosine distance:   0.558343
+Groups used:           2000
+Pairs used:            704909
+
+[random cross-group pairs]
+Avg cosine similarity: 0.671306
+Avg cosine distance:   0.328694
+Std cosine distance:   0.051973
+Min cosine distance:   0.120971
+Max cosine distance:   0.546966
+Random pairs used:     10000
+
+[separation]
+Similarity gap:        0.200561
+Distance gap:          0.200561
+Prob(similar sim > random sim): 0.953722
+
+[ols]
+[same-meaning pairs]
+Avg cosine similarity: 0.970320
+Avg cosine distance:   0.029680
+Std cosine distance:   0.018504
+Min cosine distance:   0.000000
+Max cosine distance:   0.135225
+Groups used:           2000
+Pairs used:            704909
+
+[random cross-group pairs]
+Avg cosine similarity: 0.927736
+Avg cosine distance:   0.072264
+Std cosine distance:   0.014722
+Min cosine distance:   0.018841
+Max cosine distance:   0.149599
+Random pairs used:     10000
+
+[separation]
+Similarity gap:        0.042584
+Distance gap:          0.042584
+Prob(similar sim > random sim): 0.950071
+
+[ot]
+[same-meaning pairs]
+Avg cosine similarity: 0.976682
+Avg cosine distance:   0.023318
+Std cosine distance:   0.047143
+Min cosine distance:   0.000000
+Max cosine distance:   0.357468
+Groups used:           2000
+Pairs used:            704909
+
+[random cross-group pairs]
+Avg cosine similarity: 0.732406
+Avg cosine distance:   0.267594
+Std cosine distance:   0.048290
+Min cosine distance:   0.032888
+Max cosine distance:   0.437485
+Random pairs used:     10000
+
+[separation]
+Similarity gap:        0.244276
+Distance gap:          0.244276
+Prob(similar sim > random sim): 0.995159
+
+[pairwise]
+[same-meaning pairs]
+Avg cosine similarity: 0.815110
+Avg cosine distance:   0.184890
+Std cosine distance:   0.140383
+Min cosine distance:   0.000000
+Max cosine distance:   1.135363
+Groups used:           2000
+Pairs used:            704909
+
+[random cross-group pairs]
+Avg cosine similarity: 0.489245
+Avg cosine distance:   0.510755
+Std cosine distance:   0.147013
+Min cosine distance:   0.106831
+Max cosine distance:   1.363240
+Random pairs used:     10000
+
+[separation]
+Similarity gap:        0.325864
+Distance gap:          0.325864
+Prob(similar sim > random sim): 0.939380
+
+[supcon]
+[same-meaning pairs]
+Avg cosine similarity: 0.775647
+Avg cosine distance:   0.224353
+Std cosine distance:   0.162009
+Min cosine distance:   0.000000
+Max cosine distance:   0.999320
+Groups used:           2000
+Pairs used:            704909
+
+[random cross-group pairs]
+Avg cosine similarity: 0.403771
+Avg cosine distance:   0.596229
+Std cosine distance:   0.111492
+Min cosine distance:   0.178589
+Max cosine distance:   1.117005
+Random pairs used:     10000
+
+[separation]
+Similarity gap:        0.371876
+Distance gap:          0.371876
+Prob(similar sim > random sim): 0.950242
+
+[vecMap]
+[same-meaning pairs]
+Avg cosine similarity: 0.789484
+Avg cosine distance:   0.210516
+Std cosine distance:   0.178775
+Min cosine distance:   0.000000
+Max cosine distance:   1.103727
+Groups used:           2000
+Pairs used:            704909
+
+[random cross-group pairs]
+Avg cosine similarity: 0.586053
+Avg cosine distance:   0.413947
+Std cosine distance:   0.142640
+Min cosine distance:   0.108551
+Max cosine distance:   1.056111
+Random pairs used:     10000
+
+[separation]
+Similarity gap:        0.203430
+Distance gap:          0.203430
+Prob(similar sim > random sim): 0.819425
