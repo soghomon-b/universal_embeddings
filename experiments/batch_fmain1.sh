@@ -40,15 +40,5 @@ run_one () {
 }
 
 # Experiment #  Seed  Data Size  Epochs  n_min  n_max   K   r    # sentence ret
-run_one lf11       56     500      10      50    51   50  128  2000
-run_one lf12       23    1000      10      100   101   50  128  2000
-run_one lf13       43    2000      10      200    201   50  128  2000
-run_one lf14       76    5000      10      500   501   50  128  2000
-run_one lf15       85   10000      10      1000  1001   50  128  2000
-run_one lf16       16   20000      10      2000  2001   50  128  2000
-run_one lf17       98   40000      10      4000  4001   50  128  2000
-run_one lf18       16   60000      30      2000  2001   50  128  2000
-run_one lf19        8   80000      30      2666  2667   50  128  2000
-run_one lf110      75  100000      30      3333  3334   50  128  2000
-run_one lf111      91  150000      30      5000  5000   50  128  2000
+run_one lf111      91  150000      30      5000  5001   50  128  2000
 echo "Finished batch #${BATCH}"

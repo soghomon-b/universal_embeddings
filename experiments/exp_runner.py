@@ -38,7 +38,7 @@ def run_experiment(
 ):
     print(f"----------------Running Experiment #{exp_number}----------------")
     DATA_DIR = "data/merged.tsv"
-    MODEL_NAME = "BAAI/bge-m3"
+    MODEL_NAME = "intfloat/multilingual-e5-large-instruct"
     CACHE_DIR = os.path.abspath("./model_cache")
     DEVICE_STR = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -46,7 +46,7 @@ def run_experiment(
     EVAL_LINKS_DIR = "data/eval/links.csv"
 
     # Other training hyperparams (keep fixed unless you want to expose them too)
-    BATCH = int(data_size/epochs)
+    BATCH = 2 * int(data_size/epochs)
     BATCH = min(BATCH, 5120)
     lr = 1e-3
     tau = 0.07
