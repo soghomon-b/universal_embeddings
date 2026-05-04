@@ -900,8 +900,8 @@ def evaluate_dvcca_cached(
     total_batches = 0
 
     for x_src, x_tgt in data_loader:
-        x_src = x_src.to(device, non_blocking=True)
-        x_tgt = x_tgt.to(device, non_blocking=True)
+        x_src = x_src.to(device=device, dtype=torch.float32)
+        x_tgt = x_tgt.to(device=device, dtype=torch.float32)
 
         outputs = model(x_src, x_tgt)
         outputs["x_src"] = x_src
