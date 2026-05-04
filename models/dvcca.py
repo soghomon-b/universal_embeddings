@@ -274,11 +274,21 @@ class DVCCA(nn.Module):
 
     @torch.no_grad()
     def encode_shared_src(self, x_src: torch.Tensor):
+        dtype = next(self.parameters()).dtype
+        device = next(self.parameters()).device
+
+        x_src = x_src.to(device=device, dtype=dtype)
+
         mu, _ = self.shared_src_encoder(x_src)
         return F.normalize(mu, dim=-1)
 
     @torch.no_grad()
     def encode_shared_tgt(self, x_tgt: torch.Tensor):
+        dtype = next(self.parameters()).dtype
+        device = next(self.parameters()).device
+
+        x_tgt = x_tgt.to(device=device, dtype=dtype)
+
         mu, _ = self.shared_tgt_encoder(x_tgt)
         return F.normalize(mu, dim=-1)
 
