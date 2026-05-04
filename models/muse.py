@@ -96,7 +96,10 @@ class BitextSentenceEncoder(nn.Module):
             hidden = outputs.last_hidden_state
 
         sent = self.pooler(hidden, batch["attention_mask"])  # (b, h)
-        sent = self.proj(sent)  # (b, proj_dim)
+
+        dtype = self.proj.weight.dtype
+        sent = sent.to(device=device, dtype=dtype)           
+        sent = self.proj(sent)                               # (b, proj_dim)
         sent = F.normalize(sent, dim=-1)
 
         return sent
