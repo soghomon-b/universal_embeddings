@@ -38,7 +38,7 @@ def run_experiment(
 ):
     print(f"----------------Running Experiment #{exp_number}----------------")
     DATA_DIR = "data/merged.tsv"
-    MODEL_NAME = "jinaai/jina-embeddings-v3"
+    MODEL_NAME = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
     CACHE_DIR = os.path.abspath("./model_cache")
     DEVICE_STR = "cuda" if torch.cuda.is_available() else "cpu"
 
