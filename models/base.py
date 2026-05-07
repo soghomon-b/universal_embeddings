@@ -230,8 +230,14 @@ class HFEmbedder:
         self.max_length = max_length
         self.normalize = normalize
 
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = AutoModel.from_pretrained(model_name).to(device)
+        self.tokenizer = AutoTokenizer.from_pretrained(
+    model_name,
+    trust_remote_code=True
+)
+        self.model = AutoModel.from_pretrained(
+                model_name,
+                trust_remote_code=True
+            ).to(device)
         self.model.eval()
 
         self._dim = self.model.config.hidden_size
